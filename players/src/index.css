@@ -1,0 +1,57 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-gray-200;
+  }
+  body {
+    @apply bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 text-white font-sans antialiased;
+    min-height: 100vh;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold py-3 px-6 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105;
+  }
+  
+  .btn-success {
+    @apply bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-semibold py-3 px-6 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300;
+  }
+  
+  .btn-danger {
+    @apply bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-semibold py-3 px-6 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300;
+  }
+  
+  .card {
+    @apply bg-white/10 backdrop-blur-md border border-white/20 rounded-xl shadow-2xl;
+  }
+  
+  .ticket-number {
+    @apply w-16 h-16 flex items-center justify-center text-xl font-bold rounded-lg transition-all duration-300;
+  }
+  
+  .ticket-number-empty {
+    @apply bg-transparent;
+  }
+  
+  .ticket-number-unmarked {
+    @apply bg-slate-700/30 text-slate-300 border border-slate-600/30;
+  }
+  
+  .ticket-number-called {
+    @apply bg-gradient-to-br from-yellow-500/80 to-orange-500/80 text-white border border-yellow-400/50 shadow-lg;
+  }
+  
+  .ticket-number-marked {
+    @apply bg-gradient-to-br from-green-500 to-emerald-500 text-white border border-green-400 shadow-lg animate-pulse-slow;
+  }
+  
+  .gradient-text {
+    @apply bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent;
+  }
+}
