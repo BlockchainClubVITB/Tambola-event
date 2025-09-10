@@ -1,42 +1,33 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useLocation, useSearchParams, useNavigate } from 'react-router-dom'
-import CompleteBoard from '../components/CompleteBoard'
-import React, { useState, useEffect, useRef } from 'react'
-import { useLocation, useSearchParams, useNavigate } from 'react-router-dom'
+import toast, { Toaster } from 'react-hot-toast'
 import CompleteBoard from '../components/CompleteBoard'
 import Leaderboard from '../components/Leaderboard'
 import WinnerPanel from '../components/WinnerPanel'
+import QuestionRound from '../components/QuestionRound'
 import { gameService } from '../utils/gameService'
 import { Share2, Users, Settings, Download, Play, Pause, RotateCcw, Clock, ArrowLeft } from 'lucide-react'
-import { generateGameCode, generateTambolaBoard } from '../utils/gameUtils'
-import { getRandomQuestion } from '../utils/questions'
-import { Share2, Users, Settings, Download } from 'lucide-react'
 
 const HostDashboard = () => {
   // Game State
-<<<<<<< Updated upstream
-  const [gameCode] = useState(generateGameCode())
-=======
   const [gameId, setGameId] = useState(null)
   const [gameDoc, setGameDoc] = useState(null)
   const [hostName, setHostName] = useState('')
-  // Game State - now using Appwrite
-  const [game, setGame] = useState(null)
->>>>>>> Stashed changes
   const [gameState, setGameState] = useState('waiting') // 'waiting', 'active', 'paused', 'ended'
-  const [selectedNumbers, setSelectedNumbers] = useState([])
   const [selectedNumbers, setSelectedNumbers] = useState([])
   const [currentNumber, setCurrentNumber] = useState(null)
   const [currentRound, setCurrentRound] = useState(null)
-  const [currentRound, setCurrentRound] = useState(null)
   const [gameTime, setGameTime] = useState(0)
-<<<<<<< Updated upstream
-=======
+  const [gameTimerRunning, setGameTimerRunning] = useState(false)
   const [players, setPlayers] = useState([])
   const [leaderboard, setLeaderboard] = useState([])
   const [roundPhase, setRoundPhase] = useState('idle') // 'idle', 'prepare', 'active', 'scoring'
   const [timeRemaining, setTimeRemaining] = useState(0)
   const [roundStarted, setRoundStarted] = useState(false)
+  
+  // Question Round State
+  const [showQuestionRound, setShowQuestionRound] = useState(false)
+  const [selectedQuestionNumber, setSelectedQuestionNumber] = useState(null)
 
   // Polling interval
   const pollIntervalRef = useRef(null)
@@ -55,6 +46,23 @@ const HostDashboard = () => {
       }
     }
   }, [])
+
+  // Game Timer - runs when game is active
+  useEffect(() => {
+    let gameTimerInterval = null
+    
+    if (gameTimerRunning && gameState === 'active') {
+      gameTimerInterval = setInterval(() => {
+        setGameTime(prevTime => prevTime + 1)
+      }, 1000) // Update every second
+    }
+    
+    return () => {
+      if (gameTimerInterval) {
+        clearInterval(gameTimerInterval)
+      }
+    }
+  }, [gameTimerRunning, gameState])
 
   // Start polling for updates
   const startPolling = () => {
@@ -80,6 +88,11 @@ const HostDashboard = () => {
         setGameState(game.status)
         setSelectedNumbers(game.calledNumbers || [])
         setCurrentNumber(game.currentNumber)
+        
+        // If game is active and timer isn't running, start it
+        if (game.status === 'active' && !gameTimerRunning) {
+          setGameTimerRunning(true)
+        }
       }
 
       const playersResult = await gameService.getGamePlayers(gameId)
@@ -123,269 +136,107 @@ const HostDashboard = () => {
     }
   }
 
-  // Select random number and start round workflow
-  const selectRandomNumber = async () => {
-    if (gameState !== 'waiting' && gameState !== 'active') return
-    if (roundStarted) return // Prevent multiple clicks during round
-
-    // Get available numbers (1-90 that haven't been called)
-    const allNumbers = Array.from({ length: 90 }, (_, i) => i + 1)
-    const calledNumbersAsNumbers = selectedNumbers.map(num => typeof num === 'string' ? parseInt(num) : num)
-    const availableNumbers = allNumbers.filter(num => !calledNumbersAsNumbers.includes(num))
+  // Handle question round completion
+  const handleQuestionRoundComplete = async () => {
+    // Reset round state
+    setShowQuestionRound(false)
+    setSelectedQuestionNumber(null)
+    setRoundStarted(false)
+    setRoundPhase('idle')
+    setTimeRemaining(0)
     
-    if (availableNumbers.length === 0) {
-      alert('All numbers have been called!')
+    // Update game data first
+    await fetchGameUpdates()
+    
+    // Then clear current number display - don't show previous number
+    setCurrentNumber(null)
+  }
+
+  // Handle question round cancellation
+  const handleQuestionRoundClose = () => {
+    setShowQuestionRound(false)
+    setSelectedQuestionNumber(null)
+    setRoundStarted(false)
+    setRoundPhase('idle')
+    setTimeRemaining(0)
+  }
+
+  // Handle number click from board - start question round
+  const handleNumberClick = async (number) => {
+    console.log('Number clicked:', number)
+    console.log('gameState:', gameState)
+    console.log('roundStarted:', roundStarted)
+    
+    // Check if game is active and round not started
+    if (gameState !== 'active') {
+      console.log('Game must be active to select numbers')
+      return
+    }
+    
+    if (roundStarted) {
+      console.log('Round already in progress')
+      return
+    }
+    
+    // Check if number already selected
+    if (selectedNumbers.includes(number)) {
+      console.log('Number already selected')
       return
     }
 
-    // Select random number
-    const randomIndex = Math.floor(Math.random() * availableNumbers.length)
-    const selectedNumber = availableNumbers[randomIndex]
+    console.log(`Selected number from board: ${number}`)
 
-    try {
-      // Start the round in Appwrite
-      const result = await gameService.startRound(gameId, selectedNumber)
-      if (result.success) {
-        setCurrentNumber(selectedNumber)
-        setSelectedNumbers(prev => [...prev, selectedNumber])
-        setCurrentRound(result.round)
-        setGameState('active')
-        setRoundStarted(true)
-        
-        // Start the round workflow: 5sec prepare -> 30sec active -> 5sec scoring
-        startRoundWorkflow(result.round)
-      } else {
-        alert('Failed to start round: ' + result.error)
-      }
-    } catch (error) {
-      console.error('Failed to select number:', error)
-      alert('Failed to start round')
-    }
-  }
-
-  // Start the round workflow with proper timing
-  const startRoundWorkflow = async (round) => {
-    // Phase 1: Prepare (5 seconds)
-    setRoundPhase('prepare')
-    setTimeRemaining(5)
-    await gameService.updateRoundPhase(round.$id, 'prepare')
-
-    // Countdown for prepare phase
-    let timeLeft = 5
-    const prepareInterval = setInterval(() => {
-      timeLeft--
-      setTimeRemaining(timeLeft)
-      if (timeLeft <= 0) {
-        clearInterval(prepareInterval)
-        startActivePhase(round)
-      }
-    }, 1000)
-  }
-
-  const startActivePhase = async (round) => {
-    // Phase 2: Active (30 seconds)
-    setRoundPhase('active')
-    setTimeRemaining(30)
-    await gameService.updateRoundPhase(round.$id, 'active')
-
-    // Countdown for active phase
-    let timeLeft = 30
-    const activeInterval = setInterval(() => {
-      timeLeft--
-      setTimeRemaining(timeLeft)
-      if (timeLeft <= 0) {
-        clearInterval(activeInterval)
-        startScoringPhase(round)
-      }
-    }, 1000)
-  }
-
-  const startScoringPhase = async (round) => {
-    // Phase 3: Scoring (5 seconds)
-    setRoundPhase('scoring')
-    setTimeRemaining(5)
-    await gameService.updateRoundPhase(round.$id, 'scoring')
-
-    // Countdown for scoring phase
-    let timeLeft = 5
-    const scoringInterval = setInterval(async () => {
-      timeLeft--
-      setTimeRemaining(timeLeft)
-      if (timeLeft <= 0) {
-        clearInterval(scoringInterval)
-        // End round and reset for next
-        await gameService.endRound(round.$id)
-        setRoundPhase('idle')
-        setTimeRemaining(0)
-        setRoundStarted(false)
-        setCurrentRound(null)
-        // Update leaderboard
-        await fetchGameUpdates()
-      }
-    }, 1000)
-  }
-
-  // Handle number click from board
-  const handleNumberClick = (number) => {
-    if (gameState === 'active' && !selectedNumbers.includes(number)) {
-      setCurrentNumber(number)
-      setSelectedNumbers(prev => [...prev, number])
-    }
-  const [currentRound, setCurrentRound] = useState(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState('')
->>>>>>> Stashed changes
-
-  // Sample Players Data
-  const [players, setPlayers] = useState([
-    {
-      id: '1',
-      name: 'Alice Johnson',
-      score: 85,
-      correctAnswers: 12,
-      totalAnswers: 15,
-      isOnline: true,
-      hasWon: false,
-      winType: null,
-      lastAnswerTime: new Date().toISOString()
-    },
-    {
-      id: '2', 
-      name: 'Bob Smith',
-      score: 92,
-      correctAnswers: 14,
-      totalAnswers: 16,
-      isOnline: true,
-      hasWon: true,
-      winType: 'First Line',
-      lastAnswerTime: new Date().toISOString()
-    },
-    {
-      id: '3',
-      name: 'Carol Davis',
-      score: 78,
-      correctAnswers: 10,
-      totalAnswers: 13,
-      isOnline: false,
-      hasWon: false,
-      winType: null,
-      lastAnswerTime: new Date().toISOString()
-    }
-  ])
-
-  const [winners, setWinners] = useState({
-    firstLine: {
-      playerName: 'Bob Smith',
-      score: 92,
-      timestamp: new Date().toISOString(),
-      gameTime: '12:34',
-      verified: false,
-      ticketNumbers: [5, 12, 23, 34, 45]
-    },
-    secondLine: null,
-    thirdLine: null,
-    fullHouse: null,
-    earlyFive: {
-      playerName: 'Alice Johnson',
-      score: 85,
-      timestamp: new Date().toISOString(),
-      gameTime: '05:23',
-      verified: false,
-      ticketNumbers: [7, 15, 28, 39, 56]
-    },
-    corners: null
-  })
-
-  // Game Timer
-  useEffect(() => {
-    let interval = null
-    if (gameState === 'active') {
-      interval = setInterval(() => {
-        setGameTime(prev => prev + 1)
-      }, 1000)
-    } else {
-      clearInterval(interval)
-    }
-    return () => clearInterval(interval)
-  }, [gameState])
-
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-  }
-
-  const handleStartGame = () => {
-    if (gameState === 'waiting' || gameState === 'paused') {
-      setGameState('active')
-    }
+    // Set the current number and start the round
+    // Do NOT update selectedNumbers here - let the QuestionRound component handle database update
+    // and then we'll fetch the updated state after
+    setCurrentNumber(number)
+    setRoundStarted(true)
+    
+    // Show the question round modal with timer workflow
+    setSelectedQuestionNumber(number)
+    setShowQuestionRound(true)
+    
+    console.log('Question round should now be visible')
   }
 
   const handlePauseGame = () => {
-    setGameState('paused')
+    if (gameState === 'active') {
+      setGameState('paused')
+      setGameTimerRunning(false) // Pause the timer
+    } else if (gameState === 'paused') {
+      setGameState('active')
+      setGameTimerRunning(true) // Resume the timer
+    }
   }
 
-  const handleResetGame = () => {
-    setGameState('waiting')
-<<<<<<< Updated upstream
-    setCalledNumbers([])
-    setCurrentNumber(null)
-    setGameTime(0)
-    setWinners({
-      firstLine: null,
-      secondLine: null,
-      thirdLine: null,
-      fullHouse: null,
-      earlyFive: null,
-      corners: null
-    })
-=======
-    setSelectedNumbers([])
-    setSelectedNumbers([])
-    setCurrentNumber(null)
-    setGameTime(0)
-    setRoundPhase('idle')
-    setTimeRemaining(0)
-    setRoundStarted(false)
   const handleResetGame = async () => {
-    if (!game) return
-    
     try {
-      setIsLoading(true)
-      await gameService.resetGame(game.$id)
+      // Reset database state first
+      if (gameDoc) {
+        await gameService.resetGame(gameId)
+      }
+      
+      // Then reset local state
       setGameState('waiting')
-      setCalledNumbers([])
+      setSelectedNumbers([])
       setCurrentNumber(null)
       setGameTime(0)
-      setCurrentRound(null)
-      setWinners({
-        firstLine: null,
-        secondLine: null,
-        thirdLine: null,
-        fullHouse: null,
-        earlyFive: null,
-        corners: null
-      })
-      await loadPlayers(game.$id)
+      setGameTimerRunning(false) // Stop the timer
+      setRoundPhase('idle')
+      setTimeRemaining(0)
+      setRoundStarted(false)
+      
+      // Fetch updated game state
+      await fetchGameUpdates()
+      
+      toast.success('Game reset successfully')
     } catch (error) {
-      console.error('Error resetting game:', error)
-      setError('Failed to reset game')
-    } finally {
-      setIsLoading(false)
-    }
->>>>>>> Stashed changes
-  }
-
-  const handleNumberClick = (number) => {
-    if (gameState === 'active' && !calledNumbers.includes(number)) {
-      setCurrentNumber(number)
-      setCalledNumbers(prev => [...prev, number])
+      console.error('Failed to reset game:', error)
+      toast.error('Failed to reset game')
     }
   }
 
   const handleVerifyWin = (category, winner) => {
-    console.log(`Verifying win for ${category} by ${winner.playerName}`)
-    // Add win verification logic here
     console.log(`Verifying win for ${category} by ${winner.playerName}`)
     // Add win verification logic here
   }
@@ -395,24 +246,16 @@ const HostDashboard = () => {
   }
 
   const handleShareGame = () => {
-<<<<<<< Updated upstream
-    const shareText = `Join my Blockchain Tambola game with code: ${gameCode}`
-=======
     const shareText = `Join my Tambola game with ID: ${gameId}`
-    if (!game) return
-    
-    const shareText = `Join my Blockchain Tambola game with code: ${game.gameCode}`
->>>>>>> Stashed changes
     if (navigator.share) {
       navigator.share({
-        title: 'Join my Tambola Game!',
         title: 'Join my Tambola Game!',
         text: shareText,
         url: window.location.origin
       })
     } else {
       navigator.clipboard.writeText(shareText)
-      alert('Game ID copied to clipboard!')
+      toast.success('Game ID copied to clipboard!')
     }
   }
 
@@ -429,115 +272,72 @@ const HostDashboard = () => {
     }
 
     try {
+      // First clear any existing called numbers
+      await gameService.resetGame(gameId)
+      
+      // Then start the game
       const result = await gameService.startGame(gameId)
       if (result.success) {
         setGameState('active')
         setGameDoc(result.game)
+        // Clear any current number when starting
+        setCurrentNumber(null)
+        setSelectedNumbers([])
+        // Start the game timer
+        setGameTime(0) // Reset timer to 0
+        setGameTimerRunning(true) // Start the timer
+        toast.success('Game started successfully!')
         console.log('Game started successfully')
       } else {
-        alert(`Failed to start game: ${result.error}`)
+        toast.error(`Failed to start game: ${result.error}`)
       }
     } catch (error) {
       console.error('Error starting game:', error)
-      alert('Error starting game. Please try again.')
-      alert('Game ID copied to clipboard!')
-    }
-  }
-
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-  }
-
-  const handleStartGame = async () => {
-    if (!gameId) {
-      alert('No game ID available')
-      return
-    }
-
-    try {
-      const result = await gameService.startGame(gameId)
-      if (result.success) {
-        setGameState('active')
-        setGameDoc(result.game)
-        console.log('Game started successfully')
-      } else {
-        alert(`Failed to start game: ${result.error}`)
-      }
-    } catch (error) {
-      console.error('Error starting game:', error)
-      alert('Error starting game. Please try again.')
+      toast.error('Error starting game. Please try again.')
     }
   }
 
   const gameStats = {
     totalPlayers: players.length,
-<<<<<<< Updated upstream
-=======
     questionsAnswered: selectedNumbers.length,
-    questionsAnswered: selectedNumbers.length,
-    averageScore: players.length > 0 ? Math.round(players.reduce((sum, p) => sum + p.score, 0) / players.length) : 0,
-    totalPlayers: leaderboardStats.totalPlayers,
->>>>>>> Stashed changes
-    questionsAnswered: calledNumbers.length,
     averageScore: players.length > 0 ? Math.round(players.reduce((sum, p) => sum + p.score, 0) / players.length) : 0,
     gameTimeElapsed: formatTime(gameTime)
   }
 
-<<<<<<< Updated upstream
-=======
-  // Show loading state
-  if (isLoading && !game) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="w-16 h-16 mx-auto mb-4 border-4 rounded-full border-blue-500/30 border-t-blue-500 animate-spin"></div>
-          <p className="text-slate-300">Initializing game...</p>
-        </div>
-      </div>
-    )
-  }
-
-  // Show error state
-  if (error && !game) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="max-w-md text-center">
-          <div className="p-6 mb-4 border rounded-lg bg-red-500/10 border-red-500/30">
-            <p className="mb-4 text-red-400">{error}</p>
-            <button
-              onClick={initializeGame}
-              className="btn-primary"
-            >
-              Try Again
-            </button>
+  return (
+    <div className="min-h-screen bg-black text-white p-4">
+      <div className="max-w-7xl mx-auto">
+        {/* Blockchain Club VITB Header */}
+        <div className="flex items-center justify-center mb-6">
+          <div className="flex items-center gap-4">
+            <img 
+              src="/logo.png" 
+              alt="Blockchain Club VITB" 
+              className="w-12 h-12 object-contain"
+            />
+            <div className="text-center">
+              <h1 className="text-2xl font-bold gradient-text">Blockchain Club VITB</h1>
+              <p className="text-lg text-gray-300 font-semibold">Blockchain Tambola</p>
+            </div>
           </div>
         </div>
-      </div>
-    )
-  }
 
->>>>>>> Stashed changes
-  return (
-    <div className="min-h-screen p-4 text-white bg-black">
-      <div className="mx-auto max-w-7xl">
         {/* Header */}
-        <div className="flex flex-col items-start justify-between gap-4 mb-6 lg:flex-row lg:items-center">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-4">
             <button
               onClick={() => navigate('/setup')}
-              className="flex items-center gap-2 px-3 py-2 transition-colors bg-gray-800 rounded-lg hover:bg-gray-700"
+              className="flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
               Back to Setup
             </button>
             <div>
-              <h1 className="mb-2 text-3xl font-bold text-white">Host Dashboard</h1>
+              <h1 className="text-3xl font-bold text-white mb-2">Host Dashboard</h1>
               <div className="flex items-center gap-6 text-sm text-gray-400">
                 <span className="flex items-center gap-2">
                   <Users className="w-4 h-4" />
-                  Game ID: <span className="font-mono text-lg font-bold text-blue-400">{gameId || 'Loading...'}</span>
+                  Game ID: <span className="font-mono text-blue-400 text-lg font-bold">{gameId || 'Loading...'}</span>
                 </span>
                 <span className="flex items-center gap-2">
                   Host: <span className="text-green-400">{hostName}</span>
@@ -545,58 +345,40 @@ const HostDashboard = () => {
                 <span className="flex items-center gap-2">
                   <Clock className="w-4 h-4" />
                   <span className="font-mono text-green-400">{formatTime(gameTime)}</span>
-    <div className="min-h-screen p-4">
-<<<<<<< Updated upstream
-=======
-      {/* Error Message */}
-      {error && (
-        <div className="p-3 mb-4 text-sm text-red-400 border rounded-lg bg-red-500/10 border-red-500/30">
-          {error}
-        </div>
-      )}
-
->>>>>>> Stashed changes
-      {/* Game Header */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="mb-2 text-4xl font-bold gradient-text">Host Dashboard</h1>
-            <div className="flex items-center space-x-6 text-lg">
-              <div className="flex items-center space-x-2">
-                <span className="text-slate-300">Game Code:</span>
-<<<<<<< Updated upstream
-                <span className="font-mono bg-slate-800/50 px-3 py-1 rounded border border-blue-500/30 text-blue-400">
-                  {gameCode}
-=======
-                <span className="px-3 py-1 font-mono text-blue-400 border rounded bg-slate-800/50 border-blue-500/30">
-                  {game?.gameCode || 'Loading...'}
->>>>>>> Stashed changes
                 </span>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-
-          <div className="flex items-center gap-3">
             <button
               onClick={handleShareGame}
-<<<<<<< Updated upstream
-              className="btn-secondary flex items-center space-x-2"
-=======
-              className="flex items-center gap-2 px-4 py-2 text-white transition-colors bg-blue-600 rounded-lg hover:bg-blue-700"
-              className="flex items-center space-x-2 btn-secondary"
-              disabled={!game}
->>>>>>> Stashed changes
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
             >
               <Share2 className="w-4 h-4" />
-              Share Game ID
-              Share Game ID
+              Share Game
+            </button>
+            
+            <button
+              onClick={handlePauseGame}
+              className={`flex items-center gap-2 px-4 py-2 ${gameState === 'paused' ? 'bg-green-600 hover:bg-green-700' : 'bg-orange-600 hover:bg-orange-700'} rounded-lg transition-colors`}
+            >
+              {gameState === 'paused' ? (
+                <>
+                  <Play className="w-4 h-4" />
+                  Resume
+                </>
+              ) : (
+                <>
+                  <Pause className="w-4 h-4" />
+                  Pause
+                </>
+              )}
             </button>
             
             <button
               onClick={handleResetGame}
-              className="flex items-center gap-2 px-4 py-2 text-white transition-colors bg-gray-600 rounded-lg hover:bg-gray-700"
+              className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
             >
               <RotateCcw className="w-4 h-4" />
               Reset
@@ -604,9 +386,9 @@ const HostDashboard = () => {
           </div>
         </div>
 
-        {/* Game Status */}
-        <div className="grid gap-4 mb-6 md:grid-cols-4">
-          <div className="p-4 bg-gray-800 border border-gray-600 rounded-xl">
+        {/* Game Status Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="bg-gray-800 border border-gray-600 rounded-xl p-4">
             <div className="flex items-center gap-3">
               <div className={`w-3 h-3 rounded-full ${
                 gameState === 'waiting' ? 'bg-yellow-500' :
@@ -619,21 +401,21 @@ const HostDashboard = () => {
             </div>
           </div>
 
-          <div className="p-4 bg-gray-800 border border-gray-600 rounded-xl">
+          <div className="bg-gray-800 border border-gray-600 rounded-xl p-4">
             <div className="flex items-center gap-3">
               <Clock className="w-5 h-5 text-blue-400" />
-              <span className="text-white">Numbers Called: {selectedNumbers.length}/90</span>
+              <span className="text-white">Numbers Called: {selectedNumbers.length}/50</span>
             </div>
           </div>
 
-          <div className="p-4 bg-gray-800 border border-gray-600 rounded-xl">
+          <div className="bg-gray-800 border border-gray-600 rounded-xl p-4">
             <div className="flex items-center gap-3">
               <Users className="w-5 h-5 text-green-400" />
               <span className="text-white">Players: {players.length}</span>
             </div>
           </div>
 
-          <div className="p-4 bg-gray-800 border border-gray-600 rounded-xl">
+          <div className="bg-gray-800 border border-gray-600 rounded-xl p-4">
             <div className="flex items-center gap-3">
               <span className="text-white">Phase: </span>
               <span className={`font-bold ${
@@ -648,74 +430,42 @@ const HostDashboard = () => {
         </div>
 
         {/* Game Control Buttons */}
-        <div className="flex flex-col justify-center gap-4 mb-6 sm:flex-row">
+        <div className="mb-6 flex flex-col sm:flex-row gap-4 justify-center">
           {gameState === 'waiting' && (
             <button
               onClick={handleStartGame}
-              className="px-8 py-4 text-lg font-bold text-white transition-all shadow-lg rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 hover:shadow-xl"
+              className="px-8 py-4 rounded-xl font-bold text-lg bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white shadow-lg hover:shadow-xl transition-all"
             >
-              <Play className="inline w-5 h-5 mr-2" />
+              <Play className="w-5 h-5 inline mr-2" />
               Start Game
             </button>
           )}
           
-          {gameState === 'active' && (
-            <button
-              onClick={selectRandomNumber}
-              disabled={roundStarted}
-              className={`px-8 py-4 rounded-xl font-bold text-lg transition-all ${
-                roundStarted 
-                  ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
-                  : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white shadow-lg hover:shadow-xl'
-              }`}
-            >
-              {roundStarted ? 'Round in Progress...' : 'Select Random Number'}
-            </button>
+          {gameState === 'active' && roundStarted && (
+            <div className="text-center">
+              <p className="text-xl text-orange-400 font-semibold">
+                Question Round in Progress...
+              </p>
+            </div>
           )}
         </div>
-        {/* Game Instructions */}
-        <div className="p-4 border rounded-lg bg-blue-500/10 border-blue-500/30">
-          <h3 className="mb-2 font-semibold text-blue-300">Host Instructions</h3>
-          <ul className="space-y-1 text-sm text-blue-200">
-            <li>• Click "Start Game" to begin calling numbers automatically every 40 seconds</li>
-            <li>• Click any number on the board to call it manually</li>
-            <li>• Monitor the leaderboard and verify winners in the Winners panel</li>
-            <li>• Share the game code <strong>{gameCode}</strong> with players to join</li>
-          </ul>
-        </div>
-      </div>
 
         {/* Main Layout */}
-        <div className="grid gap-6 lg:grid-cols-3">
+        <div className="grid lg:grid-cols-3 gap-6">
           {/* Left Column - Complete Board */}
-          <div className="space-y-6 lg:col-span-2">
+          <div className="lg:col-span-2 space-y-6">
             <CompleteBoard
               selectedNumbers={selectedNumbers}
               currentNumber={currentNumber}
               onNumberClick={handleNumberClick}
             />
           </div>
-      {/* Main Layout */}
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Left Column - Tambola Board */}
-        <div className="lg:col-span-2">
-          <HostBoard
-            numbers={tambolaNumbers}
-            calledNumbers={calledNumbers}
-            currentNumber={currentNumber}
-            isGameActive={gameState === 'active'}
-            onStartGame={handleStartGame}
-            onPauseGame={handlePauseGame}
-            onResetGame={handleResetGame}
-            onNumberClick={handleNumberClick}
-          />
-        </div>
 
           {/* Right Column - Leaderboard and Winners */}
           <div className="space-y-6">
             <Leaderboard 
               players={leaderboard}
-              gameTime={gameTime}
+              gameStats={gameStats}
             />
             
             <WinnerPanel
@@ -724,25 +474,38 @@ const HostDashboard = () => {
             />
           </div>
         </div>
-        {/* Right Column - Leaderboard and Winners */}
-        <div className="space-y-6">
-          <Leaderboard 
-            players={players}
-            gameStats={gameStats}
-          />
-          
-          <WinnerPanel
-            winners={winners}
-            onVerifyWin={handleVerifyWin}
-            onAwardPrize={handleAwardPrize}
-          />
-        </div>
-      </div>
 
-      {/* Footer */}
-      <div className="mt-8 text-sm text-center text-slate-400">
-        <p>Blockchain Tambola Host Dashboard v1.0</p>
-        <p className="mt-1">Built with ❤️ by BlockchainClubVITB</p>
+        {/* Question Round Modal */}
+        <QuestionRound
+          selectedNumber={selectedQuestionNumber}
+          isVisible={showQuestionRound}
+          onRoundComplete={handleQuestionRoundComplete}
+          onClose={handleQuestionRoundClose}
+          gameId={gameId}
+        />
+
+        {/* Toast Notifications */}
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            duration: 3000,
+            style: {
+              background: '#1f2937',
+              color: '#ffffff',
+              border: '1px solid #374151',
+            },
+            success: {
+              style: {
+                background: '#059669',
+              },
+            },
+            error: {
+              style: {
+                background: '#dc2626',
+              },
+            },
+          }}
+        />
       </div>
     </div>
   )

@@ -2,8 +2,8 @@ import React from 'react'
 import { CheckCircle, Clock } from 'lucide-react'
 
 const CompleteBoard = ({ selectedNumbers = [], currentNumber = null }) => {
-  // Generate all numbers 1-90
-  const allNumbers = Array.from({ length: 90 }, (_, i) => i + 1)
+  // Generate all numbers 1-50
+  const allNumbers = Array.from({ length: 50 }, (_, i) => i + 1)
 
   const getNumberStatus = (number) => {
     if (number === currentNumber) return 'current'
@@ -31,10 +31,10 @@ const CompleteBoard = ({ selectedNumbers = [], currentNumber = null }) => {
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold flex items-center gap-2">
           <Clock className="w-5 h-5 text-blue-400" />
-          Game Board (1-90)
+          Game Board (1-50)
         </h3>
         <div className="text-sm text-gray-400">
-          Called: {selectedNumbers.length}/90
+          Called: {selectedNumbers.length}/50
         </div>
       </div>
 
@@ -81,7 +81,7 @@ const CompleteBoard = ({ selectedNumbers = [], currentNumber = null }) => {
           <div className="text-xs text-gray-400">Current</div>
         </div>
         <div className="bg-gray-800 rounded-lg p-3 text-center">
-          <div className="text-2xl font-bold text-blue-400">{90 - selectedNumbers.length}</div>
+          <div className="text-2xl font-bold text-blue-400">{50 - selectedNumbers.length}</div>
           <div className="text-xs text-gray-400">Remaining</div>
         </div>
       </div>
@@ -90,12 +90,12 @@ const CompleteBoard = ({ selectedNumbers = [], currentNumber = null }) => {
       <div className="mt-4">
         <div className="flex justify-between text-sm text-gray-400 mb-1">
           <span>Game Progress</span>
-          <span>{Math.round((selectedNumbers.length / 90) * 100)}%</span>
+          <span>{Math.round((selectedNumbers.length / 50) * 100)}%</span>
         </div>
         <div className="w-full bg-gray-700 rounded-full h-2">
           <div 
             className="bg-gradient-to-r from-blue-500 to-green-500 h-2 rounded-full transition-all duration-500"
-            style={{ width: `${(selectedNumbers.length / 90) * 100}%` }}
+            style={{ width: `${(selectedNumbers.length / 50) * 100}%` }}
           ></div>
         </div>
       </div>

@@ -358,6 +358,81 @@ export class GameService {
       return { success: false, error: error.message }
     }
   }
+
+  // Update game with called numbers
+  async updateGameNumbers(gameId, calledNumber) {
+    try {
+      // Get current game
+      const gameResult = await this.getGame(gameId)
+      if (!gameResult.success) {
+        return { success: false, error: 'Game not found' }
+      }
+
+      const game = gameResult.game
+      const currentNumbers = game.calledNumbers || []
+      
+      console.log('Current numbers from database:', currentNumbers)
+      console.log('Adding number:', calledNumber)
+      
+      // Ensure we're working with integers
+      const numberAsInt = parseInt(calledNumber)
+      
+      // Add the new number if it's not already called
+      if (!currentNumbers.includes(numberAsInt)) {
+        currentNumbers.push(numberAsInt)
+      }
+
+      console.log('Updating game with numbers:', currentNumbers)
+
+      // Update the game document
+      await databases.updateDocument(
+        this.dbId,
+        this.collections.games,
+        game.$id,
+        {
+          calledNumbers: currentNumbers,
+          currentNumber: numberAsInt,
+          updatedAt: new Date().toISOString()
+        }
+      )
+
+      return { success: true, calledNumbers: currentNumbers }
+    } catch (error) {
+      console.error('Failed to update game numbers:', error)
+      return { success: false, error: error.message }
+    }
+  }
+
+  // Reset game - clear called numbers and reset status
+  async resetGame(gameId) {
+    try {
+      // Get current game
+      const gameResult = await this.getGame(gameId)
+      if (!gameResult.success) {
+        return { success: false, error: 'Game not found' }
+      }
+
+      const game = gameResult.game
+
+      // Reset the game document
+      await databases.updateDocument(
+        this.dbId,
+        this.collections.games,
+        game.$id,
+        {
+          calledNumbers: [],
+          currentNumber: null,
+          status: 'waiting',
+          updatedAt: new Date().toISOString()
+        }
+      )
+
+      return { success: true }
+    } catch (error) {
+      console.error('Failed to reset game:', error)
+      return { success: false, error: error.message }
+    }
+  }
 }
 
 export const gameService = new GameService()

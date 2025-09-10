@@ -94,7 +94,7 @@ const PlayerTicket = ({
         </div>
         
         <div className="bg-slate-800/50 rounded-lg p-4 max-w-md mx-auto">
-          <div className="grid grid-cols-9 gap-1">
+          <div className="grid grid-cols-5 gap-1">
             {ticket.map((row, rowIndex) => 
               row.map((number, colIndex) => (
                 <button

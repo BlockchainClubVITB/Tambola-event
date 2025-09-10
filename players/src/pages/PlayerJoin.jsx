@@ -1,34 +1,19 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-<<<<<<< Updated upstream
-import { User, Users, GamepadIcon, ArrowRight, BookOpen } from 'lucide-react'
-=======
 import { User, Users, GamepadIcon, ArrowRight, BookOpen, Mail, CreditCard } from 'lucide-react'
 import { gameService } from '../utils/gameService'
-import { User, Users, GamepadIcon, ArrowRight, BookOpen, Mail, Hash } from 'lucide-react'
-import { playerGameService } from '../services/playerGameService'
->>>>>>> Stashed changes
 
 const PlayerJoin = ({ onJoin }) => {
   const [gameId, setGameId] = useState('')
   const [playerName, setPlayerName] = useState('')
-<<<<<<< Updated upstream
-=======
   const [regNo, setRegNo] = useState('')
   const [email, setEmail] = useState('')
-  const [registrationNumber, setRegistrationNumber] = useState('')
-  const [email, setEmail] = useState('')
->>>>>>> Stashed changes
   const [isLoading, setIsLoading] = useState(false)
   const navigate = useNavigate()
 
   const handleJoinGame = async (e) => {
     e.preventDefault()
     
-<<<<<<< Updated upstream
-    if (!gameId.trim() || !playerName.trim()) {
-      alert('Please enter both Game ID and your name')
-=======
     if (!gameId.trim() || !playerName.trim() || !regNo.trim() || !email.trim()) {
       alert('Please fill all fields')
       return
@@ -38,26 +23,12 @@ const PlayerJoin = ({ onJoin }) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(email)) {
       alert('Please enter a valid email address')
-    if (!gameId.trim() || !playerName.trim() || !registrationNumber.trim() || !email.trim()) {
-      setError('Please fill in all fields')
-      return
-    }
-
-    // Basic email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(email)) {
-      setError('Please enter a valid email address')
->>>>>>> Stashed changes
       return
     }
 
     setIsLoading(true)
     
     try {
-<<<<<<< Updated upstream
-      // Simulate API call to join game
-      await new Promise(resolve => setTimeout(resolve, 1000))
-=======
       // Register player with Appwrite
       const result = await gameService.registerPlayer(gameId.trim().toUpperCase(), {
         name: playerName.trim(),
@@ -83,28 +54,9 @@ const PlayerJoin = ({ onJoin }) => {
       } else {
         alert(result.error || 'Failed to join game. Please try again.')
       }
-      // Use Appwrite service to join game
-      const player = await playerGameService.joinGame({
-        gameCode: gameId.trim(),
-        name: playerName.trim(),
-        registrationNumber: registrationNumber.trim(),
-        email: email.trim()
-      })
->>>>>>> Stashed changes
-      
-      // Call the onJoin callback
-      onJoin(gameId.trim(), playerName.trim())
-      
-      // Navigate to game page
-      navigate('/game')
     } catch (error) {
       console.error('Failed to join game:', error)
-<<<<<<< Updated upstream
-      alert('Failed to join game. Please try again.')
-=======
       alert('Failed to join game. Please check your connection and try again.')
-      setError(error.message || 'Failed to join game. Please try again.')
->>>>>>> Stashed changes
     } finally {
       setIsLoading(false)
     }
@@ -115,115 +67,107 @@ const PlayerJoin = ({ onJoin }) => {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen p-4">
+    <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        {/* Header */}
-        <div className="mb-8 text-center">
-          <div className="flex justify-center mb-4">
-            <div className="p-4 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full">
-              <GamepadIcon className="w-12 h-12 text-white" />
+        {/* Blockchain Club VITB Header */}
+        <div className="flex items-center justify-center mb-6">
+          <div className="flex items-center gap-3">
+            <img 
+              src="/logo.png" 
+              alt="Blockchain Club VITB" 
+              className="w-10 h-10 object-contain"
+            />
+            <div className="text-center">
+              <h1 className="text-xl font-bold gradient-text">Blockchain Club VITB</h1>
             </div>
           </div>
-          <h1 className="mb-2 text-4xl font-bold gradient-text">
+        </div>
+
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="flex justify-center mb-4">
+            <div className="p-4 bg-gray-800 border border-gray-600 rounded-full">
+              <GamepadIcon className="w-12 h-12 text-gray-300" />
+            </div>
+          </div>
+          <h1 className="text-4xl font-bold gradient-text mb-2">
             Tambola Player
           </h1>
-          <p className="text-gray-400">
           <p className="text-gray-400">
             Join an exciting game of Tambola!
           </p>
         </div>
 
         {/* Join Form */}
-<<<<<<< Updated upstream
         <div className="card p-8 mb-6">
-=======
-        <div className="p-8 mb-6 card">
-          {error && (
-            <div className="p-3 mb-4 text-sm text-red-400 border rounded-lg bg-red-500/10 border-red-500/30">
-              {error}
-            </div>
-          )}
-          
->>>>>>> Stashed changes
           <form onSubmit={handleJoinGame} className="space-y-6">
             <div>
-              <label htmlFor="gameId" className="block mb-2 text-sm font-medium text-slate-300">
+              <label htmlFor="gameId" className="block text-sm font-medium text-gray-300 mb-2">
                 Game ID
               </label>
               <div className="relative">
-                <Users className="absolute w-5 h-5 transform -translate-y-1/2 left-3 top-1/2 text-slate-500" />
+                <Users className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 w-5 h-5" />
                 <input
                   type="text"
                   id="gameId"
                   value={gameId}
-<<<<<<< Updated upstream
-                  onChange={(e) => setGameId(e.target.value)}
-=======
                   onChange={(e) => setGameId(e.target.value.toUpperCase())}
-                  onChange={(e) => setGameId(e.target.value.toUpperCase())}
->>>>>>> Stashed changes
                   placeholder="Enter Game ID"
-                  className="w-full py-3 pl-12 pr-4 text-white transition-all border rounded-lg bg-slate-800/50 border-slate-600/50 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                  className="w-full pl-12 pr-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
                   disabled={isLoading}
                 />
               </div>
             </div>
 
             <div>
-              <label htmlFor="playerName" className="block mb-2 text-sm font-medium text-slate-300">
+              <label htmlFor="playerName" className="block text-sm font-medium text-gray-300 mb-2">
                 Your Name
               </label>
               <div className="relative">
-                <User className="absolute w-5 h-5 transform -translate-y-1/2 left-3 top-1/2 text-slate-500" />
+                <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 w-5 h-5" />
                 <input
                   type="text"
                   id="playerName"
                   value={playerName}
                   onChange={(e) => setPlayerName(e.target.value)}
-                  placeholder="Enter your name"
-                  className="w-full py-3 pl-12 pr-4 text-white transition-all border rounded-lg bg-slate-800/50 border-slate-600/50 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                  placeholder="Enter your full name"
+                  className="w-full pl-12 pr-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
                   disabled={isLoading}
                 />
               </div>
             </div>
 
-<<<<<<< Updated upstream
-            <button
-              type="submit"
-              disabled={isLoading || !gameId.trim() || !playerName.trim()}
-              className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-=======
             <div>
-              <label htmlFor="registrationNumber" className="block mb-2 text-sm font-medium text-slate-300">
+              <label htmlFor="regNo" className="block text-sm font-medium text-gray-300 mb-2">
                 Registration Number
               </label>
               <div className="relative">
-                <Hash className="absolute w-5 h-5 transform -translate-y-1/2 left-3 top-1/2 text-slate-500" />
+                <CreditCard className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 w-5 h-5" />
                 <input
                   type="text"
-                  id="registrationNumber"
-                  value={registrationNumber}
-                  onChange={(e) => setRegistrationNumber(e.target.value)}
+                  id="regNo"
+                  value={regNo}
+                  onChange={(e) => setRegNo(e.target.value)}
                   placeholder="Enter your registration number"
-                  className="w-full py-3 pl-12 pr-4 text-white transition-all border rounded-lg bg-slate-800/50 border-slate-600/50 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                  className="w-full pl-12 pr-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
                   disabled={isLoading}
                 />
               </div>
             </div>
 
             <div>
-              <label htmlFor="email" className="block mb-2 text-sm font-medium text-slate-300">
+              <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-2">
                 Email Address
               </label>
               <div className="relative">
-                <Mail className="absolute w-5 h-5 transform -translate-y-1/2 left-3 top-1/2 text-slate-500" />
+                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 w-5 h-5" />
                 <input
                   type="email"
                   id="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="Enter your email address"
-                  className="w-full py-3 pl-12 pr-4 text-white transition-all border rounded-lg bg-slate-800/50 border-slate-600/50 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                  className="w-full pl-12 pr-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
                   disabled={isLoading}
                 />
               </div>
@@ -231,13 +175,12 @@ const PlayerJoin = ({ onJoin }) => {
 
             <button
               type="submit"
-              disabled={isLoading || !gameId.trim() || !playerName.trim() || !registrationNumber.trim() || !email.trim()}
-              className="flex items-center justify-center w-full gap-2 btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
->>>>>>> Stashed changes
+              disabled={isLoading || !gameId.trim() || !playerName.trim() || !regNo.trim() || !email.trim()}
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 flex items-center justify-center gap-2"
             >
               {isLoading ? (
                 <>
-                  <div className="w-5 h-5 border-2 rounded-full border-white/30 border-t-white animate-spin"></div>
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                   Joining Game...
                 </>
               ) : (
@@ -254,7 +197,7 @@ const PlayerJoin = ({ onJoin }) => {
         <div className="text-center">
           <button
             onClick={handleViewInstructions}
-            className="inline-flex items-center gap-2 font-medium text-blue-400 transition-colors hover:text-blue-300"
+            className="inline-flex items-center gap-2 text-blue-400 hover:text-blue-300 transition-colors font-medium"
           >
             <BookOpen className="w-5 h-5" />
             How to Play Tambola
@@ -262,7 +205,7 @@ const PlayerJoin = ({ onJoin }) => {
         </div>
 
         {/* Footer */}
-        <div className="mt-8 text-sm text-center text-slate-500">
+        <div className="text-center mt-8 text-sm text-gray-500">
           Need a Game ID? Ask your game host to share it with you.
         </div>
       </div>
