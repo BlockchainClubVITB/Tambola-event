@@ -18,8 +18,16 @@ A modern, educational twist on the classic Tambola (Housie/Bingo) game that teac
 ### 🎮 Interactive Gameplay
 - **Multiplayer Support**: Up to 50 players in real-time
 - **Multiple Win Conditions**: First Line, Full House, Early 5, Four Corners
-- **Live Leaderboards**: Real-time scoring and rankings
-- **Auto Number Calling**: Numbers called every 40 seconds
+- **Live Leaderboards**: Real-time scoring and rankings with Appwrite backend
+- **Auto Number Calling**: Numbers called with integrated question system
+- **Persistent Game State**: All game data stored and synchronized via Appwrite
+
+### 🔄 Real-time Features
+- **Live Synchronization**: Host and player apps sync in real-time
+- **Automatic Scoring**: +10 for correct answers, stored in database
+- **Round Management**: 5s ready, 30s answer, 5s score update timing
+- **Player Registration**: Full player data with registration numbers and emails
+- **Number Locking**: Previously selected numbers prevented via database
 
 ### 🎨 Modern UI/UX
 - **Beautiful Design**: Gradient backgrounds and smooth animations
@@ -28,16 +36,23 @@ A modern, educational twist on the classic Tambola (Housie/Bingo) game that teac
 - **Accessibility**: Keyboard navigation and screen reader support
 
 ### 🏆 Host Features
-- **Game Management**: Start, pause, reset games
-- **Player Monitoring**: Real-time player statistics
+- **Game Management**: Start, pause, reset games with Appwrite backend
+- **Player Monitoring**: Real-time player statistics and registration data
 - **Winner Verification**: Manual verification system
 - **Export Results**: Download game results and statistics
+
+### ⚡ Backend Integration
+- **Appwrite Database**: Scalable, real-time backend for all game data
+- **Persistent Storage**: Games, players, rounds, and answers stored securely
+- **Real-time Updates**: Live leaderboards and game state synchronization
+- **Data Validation**: Proper data schemas and validation rules
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 - Node.js 16+ 
 - npm or yarn
+- Appwrite account (for backend integration)
 
 ### Installation
 
@@ -47,12 +62,21 @@ git clone https://github.com/BlockchainClubVITB/Tambola-event.git
 cd Tambola-event
 ```
 
-2. **Choose your application and install dependencies**
+2. **Set up Appwrite Backend**
+   
+   Follow the detailed setup guide in [APPWRITE_SETUP.md](./APPWRITE_SETUP.md) to:
+   - Create an Appwrite project
+   - Set up database collections
+   - Configure environment variables
+
+3. **Choose your application and install dependencies**
 
 #### For Hosts (Game Management)
 ```bash
 cd host
 npm install
+cp .env.example .env
+# Edit .env with your Appwrite configuration
 npm run dev
 ```
 Navigate to `http://localhost:5173` for the host dashboard
@@ -61,6 +85,8 @@ Navigate to `http://localhost:5173` for the host dashboard
 ```bash
 cd players
 npm install
+cp .env.example .env
+# Edit .env with your Appwrite configuration (same as host)
 npm run dev
 ```
 Navigate to `http://localhost:5174` for the player interface

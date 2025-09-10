@@ -4,74 +4,105 @@ import Leaderboard from '../components/Leaderboard'
 import WinnerPanel from '../components/WinnerPanel'
 import { generateGameCode, generateTambolaBoard } from '../utils/gameUtils'
 import { getRandomQuestion } from '../utils/questions'
+import { gameService } from '../services/gameService'
+import { playerService } from '../services/playerService'
 import { Share2, Users, Settings, Download } from 'lucide-react'
 
 const HostDashboard = () => {
-  // Game State
-  const [gameCode] = useState(generateGameCode())
+  // Game State - now using Appwrite
+  const [game, setGame] = useState(null)
   const [gameState, setGameState] = useState('waiting') // 'waiting', 'active', 'paused', 'ended'
   const [tambolaNumbers] = useState(generateTambolaBoard())
   const [calledNumbers, setCalledNumbers] = useState([])
   const [currentNumber, setCurrentNumber] = useState(null)
   const [gameTime, setGameTime] = useState(0)
+  const [currentRound, setCurrentRound] = useState(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
 
-  // Sample Players Data
-  const [players, setPlayers] = useState([
-    {
-      id: '1',
-      name: 'Alice Johnson',
-      score: 85,
-      correctAnswers: 12,
-      totalAnswers: 15,
-      isOnline: true,
-      hasWon: false,
-      winType: null,
-      lastAnswerTime: new Date().toISOString()
-    },
-    {
-      id: '2', 
-      name: 'Bob Smith',
-      score: 92,
-      correctAnswers: 14,
-      totalAnswers: 16,
-      isOnline: true,
-      hasWon: true,
-      winType: 'First Line',
-      lastAnswerTime: new Date().toISOString()
-    },
-    {
-      id: '3',
-      name: 'Carol Davis',
-      score: 78,
-      correctAnswers: 10,
-      totalAnswers: 13,
-      isOnline: false,
-      hasWon: false,
-      winType: null,
-      lastAnswerTime: new Date().toISOString()
+  // Players Data - now from Appwrite
+  const [players, setPlayers] = useState([])
+  const [leaderboardStats, setLeaderboardStats] = useState({
+    totalPlayers: 0,
+    onlinePlayers: 0,
+    averageScore: 0,
+    topScore: 0
+  })
+
+  // Initialize game on component mount
+  useEffect(() => {
+    initializeGame()
+  }, [])
+
+  const initializeGame = async () => {
+    setIsLoading(true)
+    setError('')
+    
+    try {
+      // Create new game in Appwrite
+      const newGame = await gameService.createGame()
+      setGame(newGame)
+      setGameState(newGame.status)
+      setCalledNumbers(newGame.selectedNumbers || [])
+      setCurrentNumber(newGame.currentNumber)
+      
+      // Load initial players
+      await loadPlayers(newGame.$id)
+      
+      // Subscribe to real-time updates
+      subscribeToUpdates(newGame.$id)
+    } catch (error) {
+      console.error('Error initializing game:', error)
+      setError('Failed to initialize game. Please refresh and try again.')
+    } finally {
+      setIsLoading(false)
     }
-  ])
+  }
 
+  const loadPlayers = async (gameId) => {
+    try {
+      const leaderboard = await playerService.getGameLeaderboard(gameId)
+      setPlayers(leaderboard.players)
+      setLeaderboardStats(leaderboard.stats)
+    } catch (error) {
+      console.error('Error loading players:', error)
+    }
+  }
+
+  const subscribeToUpdates = (gameId) => {
+    // Subscribe to game updates
+    const gameUnsubscribe = gameService.subscribeToGame(gameId, (response) => {
+      const updatedGame = response.payload
+      setGame(updatedGame)
+      setGameState(updatedGame.status)
+      setCalledNumbers(updatedGame.selectedNumbers || [])
+      setCurrentNumber(updatedGame.currentNumber)
+    })
+
+    // Subscribe to player updates
+    const playersUnsubscribe = playerService.subscribeToGamePlayers(gameId, () => {
+      loadPlayers(gameId)
+    })
+
+    // Subscribe to rounds updates
+    const roundsUnsubscribe = gameService.subscribeToRounds(gameId, (response) => {
+      setCurrentRound(response.payload)
+    })
+
+    // Cleanup subscriptions on unmount
+    return () => {
+      gameUnsubscribe()
+      playersUnsubscribe()
+      roundsUnsubscribe()
+    }
+  }
+  // Winners state
   const [winners, setWinners] = useState({
-    firstLine: {
-      playerName: 'Bob Smith',
-      score: 92,
-      timestamp: new Date().toISOString(),
-      gameTime: '12:34',
-      verified: false,
-      ticketNumbers: [5, 12, 23, 34, 45]
-    },
+    firstLine: null,
     secondLine: null,
     thirdLine: null,
     fullHouse: null,
-    earlyFive: {
-      playerName: 'Alice Johnson',
-      score: 85,
-      timestamp: new Date().toISOString(),
-      gameTime: '05:23',
-      verified: false,
-      ticketNumbers: [7, 15, 28, 39, 56]
-    },
+    earlyFive: null,
     corners: null
   })
 
@@ -94,35 +125,117 @@ const HostDashboard = () => {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
   }
 
-  const handleStartGame = () => {
-    if (gameState === 'waiting' || gameState === 'paused') {
-      setGameState('active')
+  const handleStartGame = async () => {
+    if (!game) return
+    
+    try {
+      setIsLoading(true)
+      const status = gameState === 'waiting' || gameState === 'paused' ? 'active' : gameState
+      await gameService.updateGameStatus(game.$id, status)
+      setGameState(status)
+    } catch (error) {
+      console.error('Error starting game:', error)
+      setError('Failed to start game')
+    } finally {
+      setIsLoading(false)
     }
   }
 
-  const handlePauseGame = () => {
-    setGameState('paused')
+  const handlePauseGame = async () => {
+    if (!game) return
+    
+    try {
+      setIsLoading(true)
+      await gameService.updateGameStatus(game.$id, 'paused')
+      setGameState('paused')
+    } catch (error) {
+      console.error('Error pausing game:', error)
+      setError('Failed to pause game')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  const handleResetGame = () => {
-    setGameState('waiting')
-    setCalledNumbers([])
-    setCurrentNumber(null)
-    setGameTime(0)
-    setWinners({
-      firstLine: null,
-      secondLine: null,
-      thirdLine: null,
-      fullHouse: null,
-      earlyFive: null,
-      corners: null
-    })
+  const handleResetGame = async () => {
+    if (!game) return
+    
+    try {
+      setIsLoading(true)
+      await gameService.resetGame(game.$id)
+      setGameState('waiting')
+      setCalledNumbers([])
+      setCurrentNumber(null)
+      setGameTime(0)
+      setCurrentRound(null)
+      setWinners({
+        firstLine: null,
+        secondLine: null,
+        thirdLine: null,
+        fullHouse: null,
+        earlyFive: null,
+        corners: null
+      })
+      await loadPlayers(game.$id)
+    } catch (error) {
+      console.error('Error resetting game:', error)
+      setError('Failed to reset game')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  const handleNumberClick = (number) => {
-    if (gameState === 'active' && !calledNumbers.includes(number)) {
-      setCurrentNumber(number)
-      setCalledNumbers(prev => [...prev, number])
+  const handleNumberClick = async (number) => {
+    if (!game || gameState !== 'active' || calledNumbers.includes(number) || isLoading) {
+      return
+    }
+
+    try {
+      setIsLoading(true)
+      
+      // Get a question for this round
+      const question = getRandomQuestion()
+      
+      // Create new round in Appwrite
+      const round = await gameService.createRound(game.$id, number, question)
+      setCurrentRound(round)
+      
+      // Start round timing sequence
+      await startRoundSequence(round)
+    } catch (error) {
+      console.error('Error calling number:', error)
+      setError('Failed to call number')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const startRoundSequence = async (round) => {
+    try {
+      // Phase 1: Get Ready (5 seconds)
+      await gameService.updateRoundStatus(round.$id, 'ready')
+      await new Promise(resolve => setTimeout(resolve, 5000))
+
+      // Phase 2: Answer Time (30 seconds)
+      await gameService.updateRoundStatus(round.$id, 'active')
+      await new Promise(resolve => setTimeout(resolve, 30000))
+
+      // Phase 3: Score Update (5 seconds)
+      await gameService.updateRoundStatus(round.$id, 'scoring')
+      
+      // Process answers and update scores
+      if (round.question) {
+        await playerService.processRoundAnswers(round.$id, round.question.correct)
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 5000))
+
+      // Phase 4: Round Complete
+      await gameService.updateRoundStatus(round.$id, 'completed')
+      
+      // Refresh leaderboard
+      await loadPlayers(game.$id)
+    } catch (error) {
+      console.error('Error in round sequence:', error)
     }
   }
 
@@ -138,7 +251,9 @@ const HostDashboard = () => {
   }
 
   const handleShareGame = () => {
-    const shareText = `Join my Blockchain Tambola game with code: ${gameCode}`
+    if (!game) return
+    
+    const shareText = `Join my Blockchain Tambola game with code: ${game.gameCode}`
     if (navigator.share) {
       navigator.share({
         title: 'Join my Blockchain Tambola Game!',
@@ -152,14 +267,52 @@ const HostDashboard = () => {
   }
 
   const gameStats = {
-    totalPlayers: players.length,
+    totalPlayers: leaderboardStats.totalPlayers,
     questionsAnswered: calledNumbers.length,
-    averageScore: players.length > 0 ? Math.round(players.reduce((sum, p) => sum + p.score, 0) / players.length) : 0,
+    averageScore: leaderboardStats.averageScore,
     gameTimeElapsed: formatTime(gameTime)
+  }
+
+  // Show loading state
+  if (isLoading && !game) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-300">Initializing game...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Show error state
+  if (error && !game) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center max-w-md">
+          <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-6 mb-4">
+            <p className="text-red-400 mb-4">{error}</p>
+            <button
+              onClick={initializeGame}
+              className="btn-primary"
+            >
+              Try Again
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="min-h-screen p-4">
+      {/* Error Message */}
+      {error && (
+        <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+          {error}
+        </div>
+      )}
+
       {/* Game Header */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-4">
@@ -169,7 +322,7 @@ const HostDashboard = () => {
               <div className="flex items-center space-x-2">
                 <span className="text-slate-300">Game Code:</span>
                 <span className="font-mono bg-slate-800/50 px-3 py-1 rounded border border-blue-500/30 text-blue-400">
-                  {gameCode}
+                  {game?.gameCode || 'Loading...'}
                 </span>
               </div>
               <div className="flex items-center space-x-2">
@@ -192,6 +345,7 @@ const HostDashboard = () => {
             <button
               onClick={handleShareGame}
               className="btn-secondary flex items-center space-x-2"
+              disabled={!game}
             >
               <Share2 className="w-4 h-4" />
               <span>Share Game</span>
@@ -212,7 +366,10 @@ const HostDashboard = () => {
             <li>• Click "Start Game" to begin calling numbers automatically every 40 seconds</li>
             <li>• Click any number on the board to call it manually</li>
             <li>• Monitor the leaderboard and verify winners in the Winners panel</li>
-            <li>• Share the game code <strong>{gameCode}</strong> with players to join</li>
+            <li>• Share the game code <strong>{game?.gameCode || 'Loading...'}</strong> with players to join</li>
+            {currentRound && (
+              <li className="text-yellow-300">• Round {currentRound.roundNumber} in progress - Status: {currentRound.status}</li>
+            )}
           </ul>
         </div>
       </div>
@@ -226,10 +383,12 @@ const HostDashboard = () => {
             calledNumbers={calledNumbers}
             currentNumber={currentNumber}
             isGameActive={gameState === 'active'}
+            isLoading={isLoading}
             onStartGame={handleStartGame}
             onPauseGame={handlePauseGame}
             onResetGame={handleResetGame}
             onNumberClick={handleNumberClick}
+            currentRound={currentRound}
           />
         </div>
 
@@ -238,6 +397,7 @@ const HostDashboard = () => {
           <Leaderboard 
             players={players}
             gameStats={gameStats}
+            isLoading={isLoading}
           />
           
           <WinnerPanel

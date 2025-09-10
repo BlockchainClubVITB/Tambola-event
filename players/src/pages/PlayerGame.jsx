@@ -8,36 +8,174 @@ import {
   AlertCircle,
   CheckCircle,
   Clock,
-  GamepadIcon
+  GamepadIcon,
+  Loader
 } from 'lucide-react'
 import PlayerTicket from '../components/PlayerTicket'
+import { playerGameService } from '../services/playerGameService'
 
-const PlayerGame = ({ gameId, playerName, isJoined }) => {
+const PlayerGame = ({ gameId, playerName, player, isJoined }) => {
   const navigate = useNavigate()
+  
+  // Game state
+  const [game, setGame] = useState(null)
   const [gameState, setGameState] = useState('waiting') // waiting, playing, finished
+  const [currentRound, setCurrentRound] = useState(null)
   const [currentNumber, setCurrentNumber] = useState(null)
   const [calledNumbers, setCalledNumbers] = useState([])
+  const [roundTimer, setRoundTimer] = useState(null)
+  const [roundPhase, setRoundPhase] = useState('') // ready, active, scoring, completed
+  
+  // Player state
+  const [playerData, setPlayerData] = useState(player)
   const [playerTicket, setPlayerTicket] = useState(null)
   const [markedNumbers, setMarkedNumbers] = useState(new Set())
-  const [wins, setWins] = useState([])
-  const [gameInfo, setGameInfo] = useState({
-    totalPlayers: 0,
-    gameStartTime: null
-  })
+  const [leaderboard, setLeaderboard] = useState([])
+  const [selectedAnswer, setSelectedAnswer] = useState(null)
+  const [hasAnswered, setHasAnswered] = useState(false)
+  
+  // UI state
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState('')
 
   // Redirect if not joined
   useEffect(() => {
-    if (!isJoined || !gameId || !playerName) {
+    if (!isJoined || !gameId || !playerName || !player) {
       navigate('/')
       return
     }
 
-    // Generate a sample ticket for the player
-    generatePlayerTicket()
-    
-    // Simulate game state updates (in real app, this would be via WebSocket)
-    simulateGameUpdates()
-  }, [isJoined, gameId, playerName, navigate])
+    initializeGame()
+  }, [isJoined, gameId, playerName, player, navigate])
+
+  const initializeGame = async () => {
+    try {
+      setIsLoading(true)
+      setError('')
+
+      // Get game information
+      const gameData = await playerGameService.getGameByCode(gameId)
+      setGame(gameData)
+      setGameState(gameData.status)
+      setCalledNumbers(gameData.selectedNumbers || [])
+      setCurrentNumber(gameData.currentNumber)
+
+      // Get current round if any
+      const round = await playerGameService.getCurrentRound(gameData.$id)
+      if (round) {
+        setCurrentRound(round)
+        setRoundPhase(round.status)
+        setCurrentNumber(round.selectedNumber)
+      }
+
+      // Load leaderboard
+      await loadLeaderboard(gameData.$id)
+
+      // Generate ticket for player
+      generatePlayerTicket()
+
+      // Subscribe to updates
+      subscribeToUpdates(gameData.$id)
+    } catch (error) {
+      console.error('Error initializing game:', error)
+      setError(error.message || 'Failed to load game')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const loadLeaderboard = async (gameId) => {
+    try {
+      const players = await playerGameService.getLeaderboard(gameId)
+      setLeaderboard(players)
+      
+      // Update current player data
+      const updatedPlayer = players.find(p => p.$id === player.$id)
+      if (updatedPlayer) {
+        setPlayerData(updatedPlayer)
+      }
+    } catch (error) {
+      console.error('Error loading leaderboard:', error)
+    }
+  }
+
+  const subscribeToUpdates = (gameId) => {
+    // Subscribe to game updates
+    const gameUnsubscribe = playerGameService.subscribeToGame(gameId, (response) => {
+      const updatedGame = response.payload
+      setGame(updatedGame)
+      setGameState(updatedGame.status)
+      setCalledNumbers(updatedGame.selectedNumbers || [])
+      setCurrentNumber(updatedGame.currentNumber)
+    })
+
+    // Subscribe to rounds updates
+    const roundsUnsubscribe = playerGameService.subscribeToRounds(gameId, (response) => {
+      const round = response.payload
+      setCurrentRound(round)
+      setRoundPhase(round.status)
+      setCurrentNumber(round.selectedNumber)
+      setHasAnswered(false)
+      setSelectedAnswer(null)
+      
+      // Handle round timing
+      handleRoundTiming(round)
+    })
+
+    // Subscribe to leaderboard updates
+    const leaderboardUnsubscribe = playerGameService.subscribeToLeaderboard(gameId, () => {
+      loadLeaderboard(gameId)
+    })
+
+    // Cleanup on unmount
+    return () => {
+      gameUnsubscribe()
+      roundsUnsubscribe()
+      leaderboardUnsubscribe()
+    }
+  }
+
+  const handleRoundTiming = (round) => {
+    if (!round || !round.question) return
+
+    let timeLeft = 0
+    let timerMessage = ''
+
+    switch (round.status) {
+      case 'ready':
+        timeLeft = 5
+        timerMessage = 'Get Ready!'
+        break
+      case 'active':
+        timeLeft = 30
+        timerMessage = 'Answer Time!'
+        break
+      case 'scoring':
+        timeLeft = 5
+        timerMessage = 'Calculating Scores...'
+        break
+      default:
+        return
+    }
+
+    setRoundTimer({ timeLeft, message: timerMessage })
+
+    const interval = setInterval(() => {
+      setRoundTimer(prev => {
+        if (!prev || prev.timeLeft <= 1) {
+          clearInterval(interval)
+          return null
+        }
+        return { ...prev, timeLeft: prev.timeLeft - 1 }
+      })
+    }, 1000)
+
+    // Clear timer when round changes
+    setTimeout(() => {
+      clearInterval(interval)
+      setRoundTimer(null)
+    }, timeLeft * 1000)
+  }
 
   const generatePlayerTicket = () => {
     // Generate a random Tambola ticket (3x9 grid with 15 numbers)
@@ -72,41 +210,6 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
     setPlayerTicket(ticket)
   }
 
-  const simulateGameUpdates = () => {
-    // Simulate joining game
-    setTimeout(() => {
-      setGameInfo({
-        totalPlayers: Math.floor(Math.random() * 20) + 5,
-        gameStartTime: new Date()
-      })
-      setGameState('playing')
-    }, 2000)
-
-    // Simulate number calls
-    const allNumbers = Array.from({ length: 90 }, (_, i) => i + 1)
-    let calledCount = 0
-
-    const callNumber = () => {
-      if (calledCount < allNumbers.length && gameState !== 'finished') {
-        const availableNumbers = allNumbers.filter(num => !calledNumbers.includes(num))
-        if (availableNumbers.length > 0) {
-          const randomIndex = Math.floor(Math.random() * availableNumbers.length)
-          const newNumber = availableNumbers[randomIndex]
-          
-          setCurrentNumber(newNumber)
-          setCalledNumbers(prev => [...prev, newNumber])
-          calledCount++
-        }
-      }
-    }
-
-    // Start calling numbers after game starts
-    setTimeout(() => {
-      const interval = setInterval(callNumber, 3000)
-      return () => clearInterval(interval)
-    }, 3000)
-  }
-
   const handleNumberMark = (number) => {
     if (calledNumbers.includes(number)) {
       setMarkedNumbers(prev => {
@@ -121,19 +224,85 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
     }
   }
 
-  const handleClaimWin = (pattern) => {
-    // In real app, this would verify with server
-    alert(`Claiming ${pattern}! (This would be verified by the host in a real game)`)
-    setWins(prev => [...prev, { pattern, time: new Date() }])
-  }
+  const handleAnswerSubmit = async (optionIndex) => {
+    if (!currentRound || !currentRound.question || hasAnswered || roundPhase !== 'active') {
+      return
+    }
 
-  const handleLeaveGame = () => {
-    if (confirm('Are you sure you want to leave the game?')) {
-      navigate('/')
+    try {
+      setSelectedAnswer(optionIndex)
+      setHasAnswered(true)
+
+      await playerGameService.submitAnswer({
+        roundId: currentRound.$id,
+        playerId: player.$id,
+        playerName: playerName,
+        selectedOption: optionIndex,
+        submissionTime: new Date().toISOString()
+      })
+    } catch (error) {
+      console.error('Error submitting answer:', error)
+      setError('Failed to submit answer')
+      setSelectedAnswer(null)
+      setHasAnswered(false)
     }
   }
 
-  if (!isJoined) {
+  const handleClaimWin = (pattern) => {
+    // In real app, this would verify with server
+    alert(`Claiming ${pattern}! (This would be verified by the host in a real game)`)
+  }
+
+  const handleLeaveGame = async () => {
+    if (confirm('Are you sure you want to leave the game?')) {
+      try {
+        await playerGameService.updatePlayerStatus(player.$id, false)
+        navigate('/')
+      } catch (error) {
+        console.error('Error leaving game:', error)
+        navigate('/')
+      }
+    }
+  }
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <Loader className="w-16 h-16 text-blue-500 animate-spin mx-auto mb-4" />
+          <p className="text-slate-300">Loading game...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center max-w-md">
+          <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-6 mb-4">
+            <p className="text-red-400 mb-4">{error}</p>
+            <button
+              onClick={initializeGame}
+              className="btn-primary mr-2"
+            >
+              Retry
+            </button>
+            <button
+              onClick={() => navigate('/')}
+              className="btn-secondary"
+            >
+              Leave Game
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!isJoined || !game) {
     return null
   }
 
@@ -155,8 +324,9 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
                   <Users className="w-4 h-4" />
                   Game: {gameId}
                 </span>
-                {gameInfo.totalPlayers > 0 && (
-                  <span>{gameInfo.totalPlayers} players</span>
+                <span>{leaderboard.length} players</span>
+                {playerData && (
+                  <span className="text-yellow-400">Score: {playerData.score}</span>
                 )}
               </div>
             </div>
@@ -170,17 +340,25 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
           </button>
         </div>
 
+        {/* Round Timer */}
+        {roundTimer && (
+          <div className="card p-4 text-center mb-6 bg-gradient-to-r from-blue-500/20 to-purple-500/20 border-blue-500/30">
+            <div className="text-lg font-semibold text-blue-300 mb-2">{roundTimer.message}</div>
+            <div className="text-3xl font-bold text-white">{roundTimer.timeLeft}s</div>
+          </div>
+        )}
+
         {/* Game Status */}
         <div className="grid md:grid-cols-3 gap-4 mb-6">
           <div className="card p-4">
             <div className="flex items-center gap-3">
               <div className={`w-3 h-3 rounded-full ${
                 gameState === 'waiting' ? 'bg-yellow-500' :
-                gameState === 'playing' ? 'bg-green-500' : 'bg-gray-500'
+                gameState === 'active' ? 'bg-green-500' : 'bg-gray-500'
               }`}></div>
               <span className="font-medium">
                 {gameState === 'waiting' ? 'Waiting for Game' :
-                 gameState === 'playing' ? 'Game in Progress' : 'Game Finished'}
+                 gameState === 'active' ? 'Game in Progress' : 'Game Finished'}
               </span>
             </div>
           </div>
@@ -195,7 +373,7 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
           <div className="card p-4">
             <div className="flex items-center gap-3">
               <Trophy className="w-5 h-5 text-yellow-400" />
-              <span>Wins: {wins.length}</span>
+              <span>Rank: #{leaderboard.findIndex(p => p.$id === player.$id) + 1}</span>
             </div>
           </div>
         </div>
@@ -208,7 +386,43 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
           </div>
         )}
 
-        {gameState === 'playing' && (
+        {/* Question Display */}
+        {currentRound && currentRound.question && roundPhase === 'active' && (
+          <div className="card p-6 mb-6">
+            <div className="text-center mb-6">
+              <div className="text-sm text-slate-400 mb-2">Round {currentRound.roundNumber} - Number {currentRound.selectedNumber}</div>
+              <h3 className="text-xl font-semibold text-white mb-4">{currentRound.question.question}</h3>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {currentRound.question.options.map((option, index) => (
+                  <button
+                    key={index}
+                    onClick={() => handleAnswerSubmit(index)}
+                    disabled={hasAnswered}
+                    className={`p-4 rounded-lg border transition-all text-left ${
+                      hasAnswered && selectedAnswer === index
+                        ? 'bg-blue-500/20 border-blue-500 text-blue-300'
+                        : hasAnswered
+                        ? 'bg-slate-800/50 border-slate-600/50 text-slate-500 cursor-not-allowed'
+                        : 'bg-slate-800/50 border-slate-600/50 text-white hover:border-blue-500/50 hover:bg-blue-500/10'
+                    }`}
+                  >
+                    <span className="font-medium">{String.fromCharCode(65 + index)}.</span> {option}
+                  </button>
+                ))}
+              </div>
+              
+              {hasAnswered && (
+                <div className="mt-4 flex items-center justify-center gap-2 text-green-400">
+                  <CheckCircle className="w-5 h-5" />
+                  <span>Answer submitted!</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {gameState === 'active' && (
           <>
             {/* Current Number Display */}
             {currentNumber && (
