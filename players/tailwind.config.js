@@ -8,16 +8,16 @@ export default {
     extend: {
       colors: {
         primary: {
-          50: '#eff6ff',
-          500: '#3b82f6',
-          600: '#2563eb',
-          700: '#1d4ed8',
+          50: '#f9fafb',
+          500: '#6b7280',
+          600: '#4b5563',
+          700: '#374151',
         },
         blockchain: {
-          dark: '#1a1b23',
-          blue: '#2563eb',
-          purple: '#7c3aed',
-          gold: '#f59e0b',
+          dark: '#000000',
+          black: '#000000',
+          gray: '#1f2937',
+          accent: '#f59e0b',
         }
       },
       fontFamily: {

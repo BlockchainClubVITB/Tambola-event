@@ -45,8 +45,8 @@ const PlayerJoin = ({ onJoin }) => {
         {/* Header */}
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
-            <div className="p-4 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full">
-              <GamepadIcon className="w-12 h-12 text-white" />
+            <div className="p-4 bg-gray-800 border border-gray-600 rounded-full">
+              <GamepadIcon className="w-12 h-12 text-gray-300" />
             </div>
           </div>
           <h1 className="text-4xl font-bold gradient-text mb-2">
