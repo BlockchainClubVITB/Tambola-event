@@ -1,11 +1,15 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { User, Users, GamepadIcon, ArrowRight, BookOpen } from 'lucide-react'
+import { User, Users, GamepadIcon, ArrowRight, BookOpen, Mail, Hash } from 'lucide-react'
+import { playerGameService } from '../services/playerGameService'
 
 const PlayerJoin = ({ onJoin }) => {
   const [gameId, setGameId] = useState('')
   const [playerName, setPlayerName] = useState('')
+  const [registrationNumber, setRegistrationNumber] = useState('')
+  const [email, setEmail] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
   const navigate = useNavigate()
 
   const handleJoinGame = async (e) => {

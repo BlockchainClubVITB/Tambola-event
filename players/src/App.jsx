@@ -8,6 +8,7 @@ import './App.css'
 function App() {
   const [gameId, setGameId] = useState(null)
   const [playerName, setPlayerName] = useState('')
+  const [player, setPlayer] = useState(null)
   const [isJoined, setIsJoined] = useState(false)
 
   return (
@@ -18,9 +19,10 @@ function App() {
             path="/" 
             element={
               <PlayerJoin 
-                onJoin={(id, name) => {
+                onJoin={(id, name, playerData) => {
                   setGameId(id)
                   setPlayerName(name)
+                  setPlayer(playerData)
                   setIsJoined(true)
                 }}
               />
@@ -33,6 +35,7 @@ function App() {
               <PlayerGame 
                 gameId={gameId} 
                 playerName={playerName}
+                player={player}
                 isJoined={isJoined}
               />
             } 
