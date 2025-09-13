@@ -149,6 +149,8 @@ const HostDashboard = () => {
 
   // Handle question round completion
   const handleQuestionRoundComplete = async () => {
+    console.log('🎯 handleQuestionRoundComplete called - closing popup')
+    
     // Update frontend state immediately
     if (selectedQuestionNumber && !selectedNumbers.includes(selectedQuestionNumber)) {
       setSelectedNumbers(prev => [...prev, selectedQuestionNumber])

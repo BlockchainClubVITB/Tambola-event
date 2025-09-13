@@ -44,10 +44,10 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
   const [questionTimer, setQuestionTimer] = useState(0)
   const [processedQuestions, setProcessedQuestions] = useState(new Set()) // Track numbers that have been processed for questions
   const [isQuestionActive, setIsQuestionActive] = useState(false) // Track if a question round is currently active
-  const [lastGameStateHash, setLastGameStateHash] = useState('') // Cache game state to avoid unnecessary updates
-  const pollIntervalRef = useRef(null)
+  const [isRealTimeConnected, setIsRealTimeConnected] = useState(false) // Track real-time connection status
   const questionTimerRef = useRef(null)
   const hasShownRestorationRef = useRef(false) // Track if we've shown restoration message
+  const gameSubscriptionRef = useRef(null) // Store real-time subscription
 
   // Redirect if not joined - simple check
   useEffect(() => {
@@ -72,16 +72,21 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
     // Generate a sample ticket for the player
     generatePlayerTicket()
     
-    // Start polling for game updates
+    // Start initial game polling and set up real-time subscriptions
     startGamePolling()
 
     return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current)
-      }
+      // Clean up question timer
       if (questionTimerRef.current) {
         clearInterval(questionTimerRef.current)
       }
+      
+      // Clean up real-time subscription
+      if (gameSubscriptionRef.current) {
+        gameService.unsubscribeFromGameUpdates(gameSubscriptionRef.current)
+        setIsRealTimeConnected(false)
+      }
+      
       // Clean up question state on unmount
       setShowQuestionRound(false)
       setIsQuestionActive(false)
@@ -89,47 +94,170 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
   }, [navigate])
 
   const startGamePolling = () => {
-    // Only poll for new numbers every 10 seconds (much less frequent)
-    // Players don't need real-time updates except for new numbers
-    pollIntervalRef.current = setInterval(async () => {
-      // Only check for new numbers - no other data polling
-      await checkForNewNumbers()
-    }, 10000) // Every 10 seconds instead of 5
-
-    // Initial fetch
+    // Single initial fetch only - no continuous polling
     fetchGameState()
+    
+    // Set up real-time subscription for host events
+    setupRealTimeSubscription()
   }
 
-  // Separate function to only check for new numbers (minimal database call)
-  const checkForNewNumbers = async () => {
+  // Set up real-time subscription to listen for host events
+  const setupRealTimeSubscription = async () => {
     try {
       const storedPlayer = localStorage.getItem('tambola_player')
       const currentGameId = storedPlayer ? JSON.parse(storedPlayer).gameId : (gameId || playerData?.gameId)
       
       if (!currentGameId) return
 
-      // Only fetch the game to check called numbers - minimal data
+      const subscription = gameService.subscribeToGameUpdates(currentGameId, {
+        onGameStart: (updatedGame) => {
+          console.log('🎯 Real-time: Game started by host!')
+          setGameState('playing')
+          setGameInfo(prev => ({
+            ...prev,
+            gameData: updatedGame,
+            totalPlayers: updatedGame.playerCount || 0
+          }))
+          toast.success('🚀 Game started by host! Get ready!', { duration: 4000 })
+        },
+        
+        onNumberCalled: (updatedGame) => {
+          console.log('📢 Real-time: New number called by host!')
+          handleGameUpdateWithNewNumber(updatedGame)
+        },
+        
+        onGameUpdate: (updatedGame) => {
+          console.log('🔄 Real-time: General game update')
+          // Update basic game info
+          setGameInfo(prev => ({
+            ...prev,
+            gameData: updatedGame,
+            totalPlayers: updatedGame.playerCount || 0
+          }))
+          
+          // Handle status changes
+          if (updatedGame.status === 'finished' && gameState !== 'finished') {
+            setGameState('finished')
+            toast.success('🏆 Game finished by host!')
+          } else if (updatedGame.status === 'waiting' && gameState !== 'waiting') {
+            setGameState('waiting')
+            toast('⏳ Game reset by host...', { icon: '🔄' })
+          }
+        }
+      })
+
+      if (subscription.success) {
+        gameSubscriptionRef.current = subscription.subscriptionId
+        setIsRealTimeConnected(true)
+        console.log('✅ Real-time subscription active!')
+        toast.success('🔔 Connected to host for live updates!', { duration: 3000 })
+      } else {
+        setIsRealTimeConnected(false)
+        console.error('❌ Failed to set up real-time subscription:', subscription.error)
+        toast.error('⚠️ Real-time updates unavailable, use refresh button')
+      }
+      
+    } catch (error) {
+      console.error('❌ Real-time subscription error:', error)
+      toast.error('⚠️ Real-time connection failed')
+    }
+  }
+
+  // Handle game updates with new numbers from real-time events
+  const handleGameUpdateWithNewNumber = (updatedGame) => {
+    if (updatedGame.calledNumbers) {
+      const newCalledNumbers = updatedGame.calledNumbers.map(num => typeof num === 'string' ? parseInt(num) : num)
+      const previousCount = calledNumbers.length
+      const newCount = newCalledNumbers.length
+      
+      console.log('🔔 Processing real-time number update:', { previousCount, newCount })
+      
+      if (newCount > previousCount) {
+        // Process new number from host real-time update
+        const newNumber = newCalledNumbers[newCalledNumbers.length - 1]
+        console.log(`📢 Real-time new number: ${newNumber}`)
+        
+        // Update state and trigger question immediately
+        setCalledNumbers(newCalledNumbers)
+        handleNewNumberFromHost(newNumber, newCalledNumbers)
+      }
+    }
+  }
+
+  // Listen for host events (game start, number called)
+  const listenForHostEvents = async () => {
+    try {
+      const storedPlayer = localStorage.getItem('tambola_player')
+      const currentGameId = storedPlayer ? JSON.parse(storedPlayer).gameId : (gameId || playerData?.gameId)
+      
+      if (!currentGameId) return
+
+      // This would be replaced with real-time subscription in production
+      // For now, we'll implement a minimal check only when explicitly triggered
       const gameResult = await gameService.getGame(currentGameId)
       if (gameResult.success) {
         const game = gameResult.game
         
-        // Only check if new numbers were called
+        // Update game info
+        setGameInfo(prev => ({
+          ...prev,
+          gameData: game,
+          totalPlayers: game.playerCount || 0
+        }))
+        
+        // Check for game state changes
+        if (game.status === 'active' && gameState !== 'playing') {
+          setGameState('playing')
+          toast.success('🎯 Game started by host! Get ready!')
+        } else if (game.status === 'finished' && gameState !== 'finished') {
+          setGameState('finished')
+          toast.success('🏆 Game finished!')
+        } else if (game.status === 'waiting' && gameState !== 'waiting') {
+          setGameState('waiting')
+          toast('⏳ Game reset to waiting...', { icon: '🔄' })
+        }
+        
+        // Check for new numbers only when explicitly called
         if (game.calledNumbers) {
           const newCalledNumbers = game.calledNumbers.map(num => typeof num === 'string' ? parseInt(num) : num)
           const previousCount = calledNumbers.length
           const newCount = newCalledNumbers.length
           
-          console.log('Checking for new numbers:', { previousCount, newCount })
-          
           if (newCount > previousCount) {
-            // New number detected - trigger full game state update
-            console.log('New number detected, fetching full game state')
-            await fetchGameState()
+            // Process new number from host
+            const newNumber = newCalledNumbers[newCalledNumbers.length - 1]
+            handleNewNumberFromHost(newNumber, newCalledNumbers)
           }
         }
       }
     } catch (error) {
-      console.error('Failed to check for new numbers:', error)
+      console.error('Failed to listen for host events:', error)
+      toast.error('Failed to connect to host')
+    }
+  }
+
+  // Handle new number called by host
+  const handleNewNumberFromHost = (newNumber, allNumbers) => {
+    if (!processedQuestions.has(newNumber) && !showQuestionRound && !isQuestionActive) {
+      console.log(`📢 New number from host: ${newNumber}`)
+      setCurrentNumber(newNumber)
+      setCalledNumbers(allNumbers)
+      setProcessedQuestions(prev => new Set([...prev, newNumber]))
+      setIsQuestionActive(true)
+      
+      // Start question workflow immediately - synchronized with host
+      const question = questionsData.find(q => q.id === newNumber)
+      if (question) {
+        setQuestionData(question)
+        setSelectedAnswer(null)
+        setHasAnswered(false)
+        setShowQuestionRound(true)
+        startQuestionWorkflow() // Synchronized 5s+30s+5s workflow
+        toast.success(`🎯 Number ${newNumber} called by host!`)
+      } else {
+        toast.success(`📢 Number ${newNumber} called (No question available)`)
+        setIsQuestionActive(false)
+      }
     }
   }
 
@@ -150,7 +278,7 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
           totalPlayers: game.playerCount || 0
         }))
 
-        // Update game state
+        // Set initial game state
         if (game.status === 'active') {
           setGameState('playing')
         } else if (game.status === 'finished') {
@@ -159,85 +287,26 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
           setGameState('waiting')
         }
 
-        // Update called numbers from game state
-        if (game.calledNumbers) {
-          const newCalledNumbers = game.calledNumbers.map(num => typeof num === 'string' ? parseInt(num) : num)
+        // Load existing called numbers only on initial fetch
+        if (game.calledNumbers && calledNumbers.length === 0) {
+          const existingNumbers = game.calledNumbers.map(num => typeof num === 'string' ? parseInt(num) : num)
+          setCalledNumbers(existingNumbers)
           
-          // Check if this is initial load (restoration) or a new number was called
-          const previousCount = calledNumbers.length
-          const newCount = newCalledNumbers.length
-          
-          console.log('Fetch game state:', { 
-            previousCount, 
-            newCount, 
-            latestNumber: newCalledNumbers[newCalledNumbers.length - 1],
-            processedQuestions: Array.from(processedQuestions),
-            showQuestionRound,
-            isQuestionActive,
-            hasShownRestoration: hasShownRestorationRef.current
-          })
-          
-          // Handle initial load - mark all existing numbers as processed (restoration)
-          if (previousCount === 0 && newCount > 0 && !hasShownRestorationRef.current) {
-            console.log('Initial load detected - marking all existing numbers as processed')
-            setProcessedQuestions(new Set(newCalledNumbers))
-            hasShownRestorationRef.current = true
-            
-            const latestNumber = newCalledNumbers[newCalledNumbers.length - 1]
+          if (existingNumbers.length > 0) {
+            const latestNumber = existingNumbers[existingNumbers.length - 1]
             setCurrentNumber(latestNumber)
+            // Mark all existing numbers as processed (restoration)
+            setProcessedQuestions(new Set(existingNumbers))
+            hasShownRestorationRef.current = true
             toast.success(`Game in progress! Latest number: ${latestNumber}`)
           }
-          // Handle new numbers being called (either after initial load or during gameplay)
-          else if (newCount > previousCount) {
-            // Check each new number that was added
-            for (let i = previousCount; i < newCount; i++) {
-              const newNumber = newCalledNumbers[i]
-              
-              // Only process if not already processed and no active question
-              if (!processedQuestions.has(newNumber) && !showQuestionRound && !isQuestionActive) {
-                console.log(`Processing truly new number: ${newNumber}`)
-                setCurrentNumber(newNumber)
-                setProcessedQuestions(prev => new Set([...prev, newNumber]))
-                setLastNumberNotified(newNumber)
-                setIsQuestionActive(true)
-                
-                // Find question and start the 3-phase workflow
-                const question = questionsData.find(q => q.id === newNumber)
-                if (question) {
-                  console.log(`Starting question workflow for number ${newNumber}:`, question)
-                  setQuestionData(question)
-                  setSelectedAnswer(null)
-                  setHasAnswered(false)
-                  setShowQuestionRound(true)
-                  startQuestionWorkflow() // Start full 3-phase workflow
-                  toast.success(`New number called: ${newNumber}`)
-                } else {
-                  console.warn(`No question found for number ${newNumber}`)
-                  toast.success(`New number called: ${newNumber} (No question available)`)
-                  setIsQuestionActive(false) // Reset if no question found
-                }
-                break // Only process one new number at a time
-              } else {
-                console.log(`Skipping number ${newNumber} - already processed, question active, or not new`)
-              }
-            }
-          }
-          
-          setCalledNumbers(newCalledNumbers)
         }
 
-        // Only load player answers once on initial fetch (not every time)
-        if (playerData && game.status === 'active' && correctlyAnsweredNumbers.size === 0 && calledNumbers.length === 0) {
-          const answersResult = await gameService.getPlayerAnswers(currentGameId, playerData.id)
-          if (answersResult.success && answersResult.answers) {
-            const correctNumbers = new Set()
-            answersResult.answers.forEach(answer => {
-              if (answer.isCorrect && answer.questionNumber) {
-                correctNumbers.add(answer.questionNumber)
-              }
-            })
-            setCorrectlyAnsweredNumbers(correctNumbers)
-          }
+        // Load player's correct answers only once
+        if (playerData && game.status === 'active' && correctlyAnsweredNumbers.size === 0) {
+          // Note: We're now tracking correct answers locally only since we don't use answers collection
+          // Scores are tracked directly in the players table
+          console.log('Player answers tracking: Using local state only (no database lookup)')
         }
       }
     } catch (error) {
@@ -246,8 +315,8 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
   }
 
   const startQuestionWorkflow = () => {
-    console.log('Starting question workflow - Phase 1: Preparation (5s)')
-    // Phase 1: Exactly 5 seconds preparation (like host)
+    console.log('🎯 Starting synchronized question workflow - Phase 1: Preparation (5s)')
+    // Phase 1: Exactly 5 seconds preparation (synchronized with host)
     setQuestionPhase('prep')
     setQuestionTimer(5)
     
@@ -259,7 +328,7 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
     // Safety timeout to prevent stuck states (total workflow should be 40s max)
     setTimeout(() => {
       if (isQuestionActive) {
-        console.warn('Question workflow timeout, resetting state')
+        console.warn('⚠️ Question workflow timeout, resetting state')
         setIsQuestionActive(false)
         setShowQuestionRound(false)
       }
@@ -269,11 +338,10 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
     const prepTimer = setInterval(() => {
       timeLeft--
       setQuestionTimer(timeLeft)
-      console.log(`Prep phase: ${timeLeft}s remaining`)
       
       if (timeLeft <= 0) {
         clearInterval(prepTimer)
-        console.log('Prep phase complete, starting question phase')
+        console.log('✅ Prep phase complete, starting question phase')
         startQuestionPhase()
       }
     }, 1000)
@@ -282,8 +350,8 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
   }
 
   const startQuestionPhase = () => {
-    console.log('Starting question phase (30s)')
-    // Phase 2: Exactly 30 seconds question (like host)
+    console.log('❓ Starting question phase (30s) - synchronized with host')
+    // Phase 2: Exactly 30 seconds question (synchronized with host)
     setQuestionPhase('question')
     setQuestionTimer(30)
     
@@ -291,14 +359,13 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
     const questionTimer = setInterval(() => {
       timeLeft--
       setQuestionTimer(timeLeft)
-      console.log(`Question phase: ${timeLeft}s remaining`)
       
       if (timeLeft <= 0) {
         clearInterval(questionTimer)
         if (!hasAnswered) {
-          toast.error('Time up! No answer submitted')
+          toast.error('⏰ Time up! No answer submitted')
         }
-        console.log('Question phase complete, starting scoring phase')
+        console.log('✅ Question phase complete, starting scoring phase')
         startScoringPhase()
       }
     }, 1000)
@@ -307,8 +374,8 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
   }
 
   const startScoringPhase = () => {
-    console.log('Starting scoring phase (5s)')
-    // Phase 3: Exactly 5 seconds scoring (like host)
+    console.log('📊 Starting scoring phase (5s) - synchronized with host')
+    // Phase 3: Exactly 5 seconds scoring (synchronized with host)
     setQuestionPhase('scoring')
     setQuestionTimer(5)
     
@@ -316,11 +383,10 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
     const scoringTimer = setInterval(() => {
       timeLeft--
       setQuestionTimer(timeLeft)
-      console.log(`Scoring phase: ${timeLeft}s remaining`)
       
       if (timeLeft <= 0) {
         clearInterval(scoringTimer)
-        console.log('Scoring phase complete, ending question round')
+        console.log('✅ Scoring phase complete, ending question round')
         setTimeout(() => endQuestionRound(), 100)
       }
     }, 1000)
@@ -329,9 +395,9 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
   }
 
   const endQuestionRound = () => {
-    // Show completion like host
+    // Show completion synchronized with host
     if (questionData) {
-      toast.success(`Question ${questionData.id} completed! Leaderboard updated.`)
+      toast.success(`✅ Question ${questionData.id} completed! Leaderboard updated.`)
     }
     
     // Clean up timer
@@ -348,6 +414,7 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
       setSelectedAnswer(null)
       setHasAnswered(false)
       setIsQuestionActive(false) // Reset the active flag
+      console.log('🔄 Question round ended, ready for next number')
     }, 1000)
   }
 
@@ -360,51 +427,49 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
     setHasAnswered(true)
     const isCorrect = selectedAnswer === questionData.correctAnswer
     
-    console.log('Answer submitted:', { 
+    console.log('🎯 Answer submitted:', { 
       questionId: questionData.id, 
       selectedAnswer, 
       correctAnswer: questionData.correctAnswer, 
       isCorrect 
     })
     
+    // Immediate local feedback - no waiting for database
     if (isCorrect) {
-      // Update frontend state immediately - no need to wait for database
+      // Update frontend state immediately
       setCorrectlyAnsweredNumbers(prev => new Set([...prev, questionData.id]))
-      toast.success('Correct answer! +10 points')
+      toast.success('🎉 Correct answer! +10 points')
       
-      // Single database call to update score only
-      try {
-        const storedPlayer = localStorage.getItem('tambola_player')
-        const playerId = storedPlayer ? JSON.parse(storedPlayer).id : playerData.id
-        const currentGameId = storedPlayer ? JSON.parse(storedPlayer).gameId : playerData.gameId
-        
-        if (playerId && currentGameId) {
-          // Only record the answer and update score - no additional fetches
-          await gameService.recordPlayerAnswer(currentGameId, playerId, questionData.id, selectedAnswer, isCorrect)
-          console.log('Score updated in database')
+      // Only send database request for correct answers (async, no waiting)
+      setTimeout(async () => {
+        try {
+          const storedPlayer = localStorage.getItem('tambola_player')
+          const playerId = storedPlayer ? JSON.parse(storedPlayer).id : playerData.id
+          const currentGameId = storedPlayer ? JSON.parse(storedPlayer).gameId : playerData.gameId
+          
+          if (playerId && currentGameId) {
+            console.log('💾 Saving correct answer and updating score...')
+            const result = await gameService.recordPlayerAnswer(currentGameId, playerId, questionData.id, selectedAnswer, isCorrect)
+            if (result.success) {
+              console.log('✅ Correct answer saved and score updated in database')
+              toast.success(`💾 Score saved! Total: ${result.newScore || 'N/A'} points`)
+            } else {
+              console.error('❌ Failed to save answer:', result.error)
+            }
+          }
+        } catch (error) {
+          console.error('❌ Failed to save correct answer:', error)
+          // Don't show error to user, score is already counted locally
         }
-      } catch (error) {
-        console.error('Failed to update score:', error)
-        toast.error('Failed to save answer, but score counted locally')
-      }
+      }, 100) // Small delay to avoid blocking UI
     } else {
-      toast.error('Wrong answer!')
-      
-      // Still record wrong answers for tracking
-      try {
-        const storedPlayer = localStorage.getItem('tambola_player')
-        const playerId = storedPlayer ? JSON.parse(storedPlayer).id : playerData.id
-        const currentGameId = storedPlayer ? JSON.parse(storedPlayer).gameId : playerData.gameId
-        
-        if (playerId && currentGameId) {
-          await gameService.recordPlayerAnswer(currentGameId, playerId, questionData.id, selectedAnswer, isCorrect)
-        }
-      } catch (error) {
-        console.error('Failed to record wrong answer:', error)
-      }
+      // Wrong answer - immediate feedback, no database call needed
+      toast.error('❌ Wrong answer! Better luck next time.')
+      console.log('❌ Wrong answer, not sending to database')
     }
     
-    toast('Answer submitted!', { icon: '✅' })
+    // Show submission confirmation
+    toast('✅ Answer submitted!', { icon: '📝', duration: 2000 })
   }
 
   const generatePlayerTicket = () => {
@@ -485,11 +550,18 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
     }
   }
 
-  // Simple reload button handler - just check for new numbers
+  // Manual refresh button handler - check for host events and reconnect real-time
   const handleReload = async () => {
-    toast.success('Checking for updates...')
-    await checkForNewNumbers()
-    toast.success('Updates checked!')
+    toast.success('🔄 Refreshing connection to host...')
+    
+    // Re-establish real-time connection if lost
+    if (!gameSubscriptionRef.current) {
+      await setupRealTimeSubscription()
+    }
+    
+    // Also do a manual check as fallback
+    await listenForHostEvents()
+    toast.success('✅ Connection refreshed!')
   }
 
   return (
@@ -529,10 +601,10 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
             <button
               onClick={handleReload}
               className="flex items-center gap-2 px-4 py-2 transition-colors bg-blue-600 rounded-lg hover:bg-blue-700"
-              title="Reload game state"
+              title="Refresh connection to host"
             >
               <RotateCcw className="w-4 h-4" />
-              Reload
+              Refresh
             </button>
             
             <button
@@ -565,7 +637,7 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
           <div className="p-4 bg-gray-800 border border-gray-600 rounded-xl">
             <div className="flex items-center gap-3">
               <Clock className="w-5 h-5 text-blue-400" />
-              <span className="text-white">Numbers Called: {calledNumbers.length}/50</span>
+              <span className="text-white">Numbers: {calledNumbers.length}/50</span>
             </div>
           </div>
 
@@ -578,8 +650,12 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
 
           <div className="p-4 bg-gray-800 border border-gray-600 rounded-xl">
             <div className="flex items-center gap-3">
-              <Trophy className="w-5 h-5 text-yellow-400" />
-              <span className="text-white">Wins: {wins.length}</span>
+              <div className={`w-3 h-3 rounded-full ${
+                isRealTimeConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'
+              }`}></div>
+              <span className="font-medium text-white">
+                {isRealTimeConnected ? 'Live Connected' : 'Offline Mode'}
+              </span>
             </div>
           </div>
         </div>
@@ -608,10 +684,10 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
             {/* Question Popup - Show when number is called */}
             {showQuestionRound && questionData && (
               <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm">
-                <div className="w-full max-w-2xl p-8 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl">
+                <div className="w-full max-w-2xl p-8 border shadow-2xl bg-slate-900 border-slate-700 rounded-xl">
                   {/* Header with number and timer */}
                   <div className="mb-8 text-center">
-                    <div className="mb-4 text-8xl font-bold text-blue-400 animate-pulse">
+                    <div className="mb-4 font-bold text-blue-400 text-8xl animate-pulse">
                       {questionData.id}
                     </div>
                     <div className={`text-4xl font-bold mb-2 ${
@@ -695,6 +771,16 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
                       >
                         {hasAnswered ? '✓ Answer Submitted' : selectedAnswer !== null ? 'Submit Answer' : 'Select an answer first'}
                       </button>
+
+                      {/* Waiting message after answer submitted */}
+                      {hasAnswered && (
+                        <div className="p-4 mt-4 text-center border rounded-lg bg-blue-600/20 border-blue-500/30">
+                          <div className="mb-2 text-blue-400">✓ Answer submitted successfully!</div>
+                          <div className="text-sm text-blue-300">
+                            Waiting for other players to finish... ({questionTimer}s remaining)
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -708,6 +794,11 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
                       <p className="text-lg text-slate-300">
                         Updating leaderboard and calculating scores
                       </p>
+                      {hasAnswered && (
+                        <div className="mt-4 text-sm text-green-400">
+                          ✓ Your answer has been recorded
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -756,7 +847,7 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
             {/* Complete Board */}
             <div className="mb-6">
               <CompleteBoard 
-                calledNumbers={calledNumbers}
+                selectedNumbers={calledNumbers}
                 currentNumber={currentNumber}
                 processedQuestions={processedQuestions}
               />

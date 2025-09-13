@@ -25,6 +25,10 @@ const QuestionRound = ({
       clearInterval(timerInterval)
     }
 
+    // Reset phase to prep when starting new round
+    setCurrentPhase('prep')
+    setCountdown(5)
+
     // Get question for the selected number
     const question = questions.find(q => q.id === selectedNumber) || questions[0]
     setCurrentQuestion(question)
@@ -94,6 +98,7 @@ const QuestionRound = ({
   }
 
   const startScoringPhase = () => {
+    console.log('📊 Starting scoring phase for number:', selectedNumber)
     // Phase 3: Exactly 5 seconds scoring
     setCurrentPhase('scoring')
     setCountdown(5)
@@ -104,6 +109,7 @@ const QuestionRound = ({
       setCountdown(timeLeft)
       
       if (timeLeft <= 0) {
+        console.log('⏱️ Scoring timer finished, completing round')
         clearInterval(scoringTimer)
         setTimeout(() => completeRound(), 100)
       }
@@ -113,16 +119,21 @@ const QuestionRound = ({
   }
 
   const completeRound = useCallback(() => {
+    console.log('🏁 completeRound called for number:', selectedNumber)
+    
     // Show completion notification
     toast.success(`Question ${selectedNumber} completed! Leaderboard updated.`)
     
     // Clean up and close
     if (timerInterval) {
       clearInterval(timerInterval)
+      console.log('🧹 Timer interval cleared')
     }
     
     // Auto-close popup after notification
+    console.log('⏰ Setting timeout to close popup in 1 second')
     setTimeout(() => {
+      console.log('🚪 Calling onRoundComplete to close popup')
       onRoundComplete()
     }, 1000)
   }, [selectedNumber, timerInterval, onRoundComplete])
