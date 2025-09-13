@@ -100,7 +100,7 @@ const PlayerJoin = ({ onJoin }) => {
             </div>
           </div>
           <h1 className="mb-2 text-4xl font-bold gradient-text">
-            Tambola Player
+            Decrypt2win Player
           </h1>
           <p className="text-gray-400">
             Join an exciting game of Tambola!
