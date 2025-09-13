@@ -31,6 +31,8 @@ const HostDashboard = () => {
 
   // Polling interval
   const pollIntervalRef = useRef(null)
+  const [lastGameStateHash, setLastGameStateHash] = useState('') // Cache to avoid unnecessary updates
+  const [lastPlayersCount, setLastPlayersCount] = useState(0) // Track player count changes
   
   // Navigation
   const location = useLocation()
@@ -66,18 +68,11 @@ const HostDashboard = () => {
 
   // Start polling for updates
   const startPolling = () => {
-    if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current)
-    }
-    
-    pollIntervalRef.current = setInterval(async () => {
-      if (gameId) {
-        await fetchGameUpdates()
-      }
-    }, 2000) // Poll every 2 seconds
+    // Remove continuous polling - only manual refresh now
+    console.log('Continuous polling disabled - use manual refresh for updates')
   }
 
-  // Fetch game updates
+  // Fetch only basic game updates (called when needed)
   const fetchGameUpdates = async () => {
     try {
       // Get current game state
@@ -94,18 +89,34 @@ const HostDashboard = () => {
           setGameTimerRunning(true)
         }
       }
+    } catch (error) {
+      console.error('Failed to fetch game updates:', error)
+    }
+  }
 
+  // Separate function to manually refresh leaderboard
+  const refreshLeaderboard = async () => {
+    try {
+      const leaderboardResult = await gameService.getLeaderboard(gameId)
+      if (leaderboardResult.success) {
+        setLeaderboard(leaderboardResult.players)
+        toast.success('Leaderboard updated!')
+      }
+    } catch (error) {
+      console.error('Failed to refresh leaderboard:', error)
+      toast.error('Failed to refresh leaderboard')
+    }
+  }
+
+  // Separate function to fetch players (only when needed)
+  const fetchPlayers = async () => {
+    try {
       const playersResult = await gameService.getGamePlayers(gameId)
       if (playersResult.success) {
         setPlayers(playersResult.players)
       }
-
-      const leaderboardResult = await gameService.getLeaderboard(gameId)
-      if (leaderboardResult.success) {
-        setLeaderboard(leaderboardResult.players)
-      }
     } catch (error) {
-      console.error('Failed to fetch game updates:', error)
+      console.error('Failed to fetch players:', error)
     }
   }
 
@@ -138,6 +149,11 @@ const HostDashboard = () => {
 
   // Handle question round completion
   const handleQuestionRoundComplete = async () => {
+    // Update frontend state immediately
+    if (selectedQuestionNumber && !selectedNumbers.includes(selectedQuestionNumber)) {
+      setSelectedNumbers(prev => [...prev, selectedQuestionNumber])
+    }
+    
     // Reset round state
     setShowQuestionRound(false)
     setSelectedQuestionNumber(null)
@@ -145,10 +161,10 @@ const HostDashboard = () => {
     setRoundPhase('idle')
     setTimeRemaining(0)
     
-    // Update game data first
-    await fetchGameUpdates()
+    // No automatic refresh - host can manually refresh leaderboard if needed
+    console.log('Question round completed, number locked on frontend')
     
-    // Then clear current number display - don't show previous number
+    // Clear current number display
     setCurrentNumber(null)
   }
 
@@ -286,6 +302,11 @@ const HostDashboard = () => {
         // Start the game timer
         setGameTime(0) // Reset timer to 0
         setGameTimerRunning(true) // Start the timer
+        
+        // Fetch initial players and leaderboard after starting
+        await fetchPlayers()
+        await refreshLeaderboard()
+        
         toast.success('Game started successfully!')
         console.log('Game started successfully')
       } else {
@@ -463,10 +484,21 @@ const HostDashboard = () => {
 
           {/* Right Column - Leaderboard and Winners */}
           <div className="space-y-6">
-            <Leaderboard 
-              players={leaderboard}
-              gameStats={gameStats}
-            />
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-white">Leaderboard</h3>
+                <button
+                  onClick={refreshLeaderboard}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Refresh Scores
+                </button>
+              </div>
+              <Leaderboard 
+                players={leaderboard}
+                gameStats={gameStats}
+              />
+            </div>
             
             <WinnerPanel
               onVerifyWin={handleVerifyWin}

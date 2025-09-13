@@ -1,12 +1,13 @@
 import React from 'react'
-import { CheckCircle, Clock } from 'lucide-react'
+import { CheckCircle, Clock, X } from 'lucide-react'
 
-const CompleteBoard = ({ selectedNumbers = [], currentNumber = null }) => {
+const CompleteBoard = ({ selectedNumbers = [], currentNumber = null, processedQuestions = new Set() }) => {
   // Generate all numbers 1-50
   const allNumbers = Array.from({ length: 50 }, (_, i) => i + 1)
 
   const getNumberStatus = (number) => {
     if (number === currentNumber) return 'current'
+    if (processedQuestions.has(number)) return 'processed'
     if (selectedNumbers.includes(number)) return 'selected'
     return 'available'
   }
@@ -17,6 +18,8 @@ const CompleteBoard = ({ selectedNumbers = [], currentNumber = null }) => {
     switch (status) {
       case 'current':
         return 'bg-yellow-500 text-black border-yellow-400 shadow-lg animate-pulse'
+      case 'processed':
+        return 'bg-red-900 text-red-300 border-red-600 blur-sm opacity-75 line-through'
       case 'selected':
         return 'bg-gray-700 text-green-400 border-green-600'
       case 'available':
@@ -49,6 +52,10 @@ const CompleteBoard = ({ selectedNumbers = [], currentNumber = null }) => {
           <span>Called</span>
         </div>
         <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-red-900 border border-red-600 rounded blur-sm opacity-75"></div>
+          <span>Completed</span>
+        </div>
+        <div className="flex items-center gap-2">
           <div className="w-4 h-4 bg-gray-800 border border-gray-700 rounded"></div>
           <span>Not Called</span>
         </div>
@@ -60,12 +67,19 @@ const CompleteBoard = ({ selectedNumbers = [], currentNumber = null }) => {
           <div
             key={number}
             className={`
-              w-10 h-10 flex items-center justify-center text-sm font-bold rounded border transition-all duration-300
+              w-10 h-10 flex items-center justify-center text-sm font-bold rounded border transition-all duration-300 relative
               ${getNumberClass(number)}
             `}
             title={`Number ${number} - ${getNumberStatus(number)}`}
           >
-            {number}
+            {processedQuestions.has(number) ? (
+              <div className="relative">
+                <span className="opacity-50">{number}</span>
+                <X className="w-6 h-6 text-red-500 absolute inset-0 m-auto" />
+              </div>
+            ) : (
+              number
+            )}
           </div>
         ))}
       </div>

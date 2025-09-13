@@ -51,6 +51,10 @@
     @apply bg-gradient-to-br from-green-500 to-emerald-500 text-white border border-green-400 shadow-lg animate-pulse-slow;
   }
   
+  .ticket-number-correct {
+    @apply bg-gradient-to-br from-green-600 to-green-500 text-white border-2 border-green-300 shadow-lg ring-2 ring-green-400/50;
+  }
+  
   .gradient-text {
     @apply bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent;
   }

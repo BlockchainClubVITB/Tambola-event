@@ -37,7 +37,7 @@ export class GameService {
         return { success: false, error: 'Game not found' }
       }
 
-      // Check if player already registered
+      // Check if player already registered with same email
       const existingPlayers = await databases.listDocuments(
         this.dbId,
         this.collections.players,
@@ -48,7 +48,9 @@ export class GameService {
       )
 
       if (existingPlayers.documents.length > 0) {
-        return { success: false, error: 'Player already registered with this email' }
+        // Return existing player data instead of error
+        const existingPlayer = existingPlayers.documents[0]
+        return { success: true, player: existingPlayer, isReturning: true }
       }
 
       // Register new player
@@ -84,7 +86,7 @@ export class GameService {
         }
       )
 
-      return { success: true, player }
+      return { success: true, player, isReturning: false }
     } catch (error) {
       console.error('Failed to register player:', error)
       return { success: false, error: error.message }
@@ -191,6 +193,82 @@ export class GameService {
       return { success: true, players: response.documents }
     } catch (error) {
       console.error('Failed to get game players:', error)
+      return { success: false, error: error.message }
+    }
+  }
+
+  // Update player score
+  async updatePlayerScore(playerId, pointsToAdd) {
+    try {
+      // Get current player data
+      const playerResponse = await databases.getDocument(
+        this.dbId,
+        this.collections.players,
+        playerId
+      )
+
+      const currentScore = playerResponse.score || 0
+      const newScore = currentScore + pointsToAdd
+
+      // Update player score
+      await databases.updateDocument(
+        this.dbId,
+        this.collections.players,
+        playerId,
+        {
+          score: newScore,
+          updatedAt: new Date().toISOString()
+        }
+      )
+
+      return { success: true, newScore }
+    } catch (error) {
+      console.error('Failed to update player score:', error)
+      return { success: false, error: error.message }
+    }
+  }
+
+  // Record player answer for a round
+  async recordPlayerAnswer(gameId, playerId, questionNumber, selectedAnswer, isCorrect) {
+    try {
+      const answerData = {
+        gameId,
+        playerId,
+        questionNumber,
+        selectedAnswer: selectedAnswer !== null ? selectedAnswer : -1, // -1 for no answer
+        isCorrect: isCorrect || false,
+        submittedAt: new Date().toISOString()
+      }
+
+      const response = await databases.createDocument(
+        this.dbId,
+        this.collections.answers,
+        generateId(),
+        answerData
+      )
+
+      return { success: true, answer: response }
+    } catch (error) {
+      console.error('Failed to record player answer:', error)
+      return { success: false, error: error.message }
+    }
+  }
+
+  // Get player's answered questions (for showing green tickets)
+  async getPlayerAnswers(gameId, playerId) {
+    try {
+      const response = await databases.listDocuments(
+        this.dbId,
+        this.collections.answers,
+        [
+          Query.equal('gameId', gameId),
+          Query.equal('playerId', playerId)
+        ]
+      )
+
+      return { success: true, answers: response.documents }
+    } catch (error) {
+      console.error('Failed to get player answers:', error)
       return { success: false, error: error.message }
     }
   }

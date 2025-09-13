@@ -5,15 +5,18 @@ const PlayerTicket = ({
   ticket, 
   calledNumbers, 
   markedNumbers, 
+  correctlyAnsweredNumbers = new Set(), // Numbers answered correctly in questions
   onNumberMark, 
   onClaimWin 
 }) => {
   
   const isNumberCalled = (number) => calledNumbers.includes(number)
   const isNumberMarked = (number) => markedNumbers.has(number)
+  const isNumberCorrectlyAnswered = (number) => correctlyAnsweredNumbers.has(number)
   
   const getNumberClass = (number) => {
     if (!number) return 'ticket-number-empty'
+    if (isNumberCorrectlyAnswered(number)) return 'ticket-number-correct'
     if (isNumberMarked(number)) return 'ticket-number-marked'
     if (isNumberCalled(number)) return 'ticket-number-called'
     return 'ticket-number-unmarked'
