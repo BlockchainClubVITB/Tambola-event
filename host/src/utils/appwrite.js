@@ -2,14 +2,14 @@ import { Client, Databases, Account, ID, Query } from 'appwrite'
 
 // Appwrite configuration
 export const APPWRITE_CONFIG = {
-  endpoint: import.meta.env.VITE_APPWRITE_ENDPOINT || 'https://fra.cloud.appwrite.io/v1',
-  projectId: import.meta.env.VITE_APPWRITE_PROJECT_ID || '68c15a4f000e7ae4cf45',
-  databaseId: '68c15b270004dfd69741',
+  endpoint: import.meta.env.VITE_APPWRITE_ENDPOINT,
+  projectId: import.meta.env.VITE_APPWRITE_PROJECT_ID,
+  databaseId: import.meta.env.VITE_APPWRITE_DATABASE_ID,
   collections: {
-    games: 'games',
-    players: 'players', 
-    rounds: 'rounds',
-    answers: 'answers'
+    games: import.meta.env.VITE_APPWRITE_GAMES_COLLECTION_ID,
+    players: import.meta.env.VITE_APPWRITE_PLAYERS_COLLECTION_ID,
+    rounds: import.meta.env.VITE_APPWRITE_ROUNDS_COLLECTION_ID,
+    answers: import.meta.env.VITE_APPWRITE_ANSWERS_COLLECTION_ID
   }
 }
 

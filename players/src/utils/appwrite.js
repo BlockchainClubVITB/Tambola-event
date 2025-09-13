@@ -1,9 +1,15 @@
 import { Client, Databases, Account, ID, Query } from 'appwrite'
 
+// Direct configuration values for deployment (from .env)
+const VITE_APPWRITE_PROJECT_ID = "68c15a4f000e7ae4cf45";
+const VITE_APPWRITE_PROJECT_NAME = "Blockchain-Tambola";
+const VITE_APPWRITE_ENDPOINT = "https://fra.cloud.appwrite.io/v1";
+
 // Appwrite configuration
 export const APPWRITE_CONFIG = {
-  endpoint: import.meta.env.VITE_APPWRITE_ENDPOINT || 'https://fra.cloud.appwrite.io/v1',
-  projectId: import.meta.env.VITE_APPWRITE_PROJECT_ID || '68c15a4f000e7ae4cf45',
+  endpoint: VITE_APPWRITE_ENDPOINT,
+  projectId: VITE_APPWRITE_PROJECT_ID,
+  projectName: VITE_APPWRITE_PROJECT_NAME,
   databaseId: '68c15b270004dfd69741',
   collections: {
     games: 'games',
