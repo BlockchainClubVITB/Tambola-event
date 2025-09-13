@@ -230,28 +230,121 @@ export class GameService {
     }
   }
 
-  // Update player score directly when answer is correct (skip answers collection)
-  async recordPlayerAnswer(gameId, playerId, questionNumber, selectedAnswer, isCorrect) {
+  // Check if a winning condition has already been won by another player
+  async checkWinConditionAvailable(gameId, condition) {
     try {
-      // Only update score if answer is correct - skip answers collection entirely
+      const result = await databases.listDocuments(
+        this.dbId,
+        this.collections.players,
+        [
+          Query.equal('gameId', gameId),
+          Query.equal(condition, true),
+          Query.limit(1) // Only need to know if any player has won this condition
+        ]
+      )
+      
+      // Return true if no one has won this condition yet
+      return result.documents.length === 0
+    } catch (error) {
+      console.error(`Failed to check ${condition} availability:`, error)
+      // On error, allow the win attempt (fail open)
+      return true
+    }
+  }
+
+  // OPTIMIZED: Update player score directly when answer is correct (single request)
+  async recordPlayerAnswer(gameId, playerId, questionNumber, selectedAnswer, isCorrect, winConditions = {}, correctNumbers = new Set()) {
+    try {
+      // Only update if answer is correct - single optimized request
       if (isCorrect) {
-        const result = await this.updatePlayerScore(playerId, 10)
-        if (result.success) {
-          return { success: true, newScore: result.newScore, message: 'Score updated successfully' }
-        } else {
-          return { success: false, error: result.error }
+        // Get current player data
+        const currentPlayer = await databases.getDocument(
+          this.dbId,
+          this.collections.players,
+          playerId
+        )
+
+        const currentScore = currentPlayer.score || 0
+        const newScore = currentScore + 10
+
+        // Prepare update data with score, wins, and correct numbers in one request
+        const updateData = {
+          score: newScore,
+          correctNumbers: Array.from(correctNumbers)
+        }
+
+        // Check which winning conditions are actually available (not already won by others)
+        const availableWins = {}
+        for (const [condition, won] of Object.entries(winConditions)) {
+          if (won && !currentPlayer[condition]) { // Only if player hasn't won it yet
+            // Check if this condition is still available (no other player has won it)
+            const isAvailable = await this.checkWinConditionAvailable(gameId, condition)
+            if (isAvailable) {
+              availableWins[condition] = true
+            } else {
+              console.log(`🚫 ${condition} already won by another player, not awarding to ${playerId}`)
+            }
+          }
+        }
+
+        // Add winning conditions if any new wins are available
+        const timestamp = new Date().toISOString()
+        let winTimestamps = {}
+        
+        // Parse existing winTimestamps
+        if (currentPlayer.winTimestamps) {
+          try {
+            winTimestamps = JSON.parse(currentPlayer.winTimestamps)
+          } catch (e) {
+            console.warn('Failed to parse existing winTimestamps, using empty object')
+            winTimestamps = {}
+          }
+        }
+
+        // Add new available wins
+        let hasNewWins = false
+        for (const [condition, won] of Object.entries(availableWins)) {
+          if (won) {
+            updateData[condition] = true
+            winTimestamps[condition] = timestamp
+            hasNewWins = true
+            console.log(`🏆 ${condition} awarded to player ${playerId}`)
+          }
+        }
+
+        // Update winTimestamps if there are any wins
+        if (hasNewWins || Object.keys(winTimestamps).length > 0) {
+          updateData.winTimestamps = JSON.stringify(winTimestamps)
+        }
+
+        // SINGLE REQUEST: Update everything at once
+        const response = await databases.updateDocument(
+          this.dbId,
+          this.collections.players,
+          playerId,
+          updateData
+        )
+
+        console.log(`✅ OPTIMIZED: Player ${playerId} updated in single request: score ${currentScore} -> ${newScore}, available wins:`, availableWins)
+        return { 
+          success: true, 
+          newScore, 
+          player: response, 
+          newWins: availableWins, // Return only the wins that were actually awarded
+          deniedWins: Object.keys(winConditions).filter(c => winConditions[c] && !availableWins[c]), // Track wins that were denied
+          message: 'Score and wins updated successfully' 
         }
       } else {
         // Wrong answer - no database update needed
         return { success: true, message: 'Wrong answer, no score update' }
       }
     } catch (error) {
-      console.error('Failed to update player score:', error)
+      console.error('Failed to update player score and wins:', error)
       return { success: false, error: error.message }
     }
   }
 
-  // Update player score by adding points
+  // DEPRECATED: Keep for backward compatibility but prefer recordPlayerAnswer for optimization
   async updatePlayerScore(playerId, pointsToAdd) {
     try {
       // First get current player data
@@ -269,7 +362,10 @@ export class GameService {
         this.dbId,
         this.collections.players,
         playerId,
-        { score: newScore }
+        { 
+          score: newScore,
+          updatedAt: new Date().toISOString()
+        }
       )
 
       console.log(`Player ${playerId} score updated: ${currentScore} -> ${newScore} (+${pointsToAdd})`)
@@ -378,6 +474,44 @@ export class GameService {
       return { success: true, answers: response.documents }
     } catch (error) {
       console.error('Failed to get player answers:', error)
+      return { success: false, error: error.message }
+    }
+  }
+
+  // Get all winners for a specific game and condition
+  async getGameWinners(gameId, condition = null) {
+    try {
+      const queries = [Query.equal('gameId', gameId)]
+      
+      if (condition) {
+        queries.push(Query.equal(condition, true))
+      }
+
+      const response = await databases.listDocuments(
+        this.dbId,
+        this.collections.players,
+        queries
+      )
+
+      return { success: true, winners: response.documents }
+    } catch (error) {
+      console.error('Failed to get game winners:', error)
+      return { success: false, error: error.message }
+    }
+  }
+
+  // Check if a player has already won a specific condition
+  async hasPlayerWon(playerId, condition) {
+    try {
+      const player = await databases.getDocument(
+        this.dbId,
+        this.collections.players,
+        playerId
+      )
+
+      return { success: true, hasWon: player[condition] === true }
+    } catch (error) {
+      console.error('Failed to check player win status:', error)
       return { success: false, error: error.message }
     }
   }

@@ -16,14 +16,14 @@ const PlayerJoin = ({ onJoin }) => {
     e.preventDefault()
     
     if (!gameId.trim() || !playerName.trim() || !regNo.trim() || !email.trim()) {
-      alert('Please fill all fields')
+      toast.error('Please fill all fields')
       return
     }
 
     // Basic email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(email)) {
-      alert('Please enter a valid email address')
+      toast.error('Please enter a valid email address')
       return
     }
 
@@ -76,53 +76,56 @@ const PlayerJoin = ({ onJoin }) => {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen p-4">
-      <div className="w-full max-w-md">
-        {/* Blockchain Club VITB Header */}
-        <div className="flex items-center justify-center mb-6">
-          <div className="flex items-center gap-3">
+    <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-gray-800 flex items-center justify-center p-2 sm:p-4 lg:p-6">
+      <div className="w-full max-w-sm sm:max-w-md lg:max-w-lg">
+        {/* Header with Logo, Club Name and Decrypt2win in vertical order */}
+        <div className="text-center mb-4 sm:mb-6">
+          <div className="flex justify-center mb-3">
             <img 
               src="/logo.png" 
               alt="Blockchain Club VITB" 
-              className="object-contain w-10 h-10"
+              className="object-contain w-12 h-12 sm:w-16 sm:h-16"
             />
-            <div className="text-center">
-              <h1 className="text-xl font-bold gradient-text">Blockchain Club VITB</h1>
-            </div>
           </div>
+          <h1 className="text-lg sm:text-xl font-bold bg-gradient-to-r from-gray-300 to-white bg-clip-text text-transparent mb-2" style={{fontFamily: 'Fira Code, monospace'}}>
+            Blockchain Club VITB
+          </h1>
+          <h2 className="text-lg sm:text-xl font-bold bg-gradient-to-r from-gray-300 to-white bg-clip-text text-transparent" style={{fontFamily: 'Fira Code, monospace'}}>
+            Decrypt2win
+          </h2>
         </div>
 
         {/* Header */}
-        <div className="mb-8 text-center">
-          <div className="flex justify-center mb-4">
-            <div className="p-4 bg-gray-800 border border-gray-600 rounded-full">
-              <GamepadIcon className="w-12 h-12 text-gray-300" />
+        <div className="mb-6 sm:mb-8 text-center">
+          <div className="flex justify-center mb-3 sm:mb-4">
+            <div className="p-3 sm:p-4 bg-white/10 backdrop-blur-md border border-white/20 rounded-full">
+              <GamepadIcon className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 text-gray-300" />
             </div>
           </div>
-          <h1 className="mb-2 text-4xl font-bold gradient-text">
-            Decrypt2win Player
+          <h1 className="mb-2 text-2xl sm:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-gray-300 to-white bg-clip-text text-transparent" style={{fontFamily: 'Fira Code, monospace'}}>
+            Player
           </h1>
-          <p className="text-gray-400">
+          <p className="text-gray-400 text-sm sm:text-base">
             Join an exciting game of Tambola!
           </p>
         </div>
 
         {/* Join Form */}
-        <div className="p-8 mb-6 card">
-          <form onSubmit={handleJoinGame} className="space-y-6">
+        <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-xl shadow-2xl p-4 sm:p-6 lg:p-8 mb-4 sm:mb-6">
+          <form onSubmit={handleJoinGame} className="space-y-4 sm:space-y-6">
             <div>
               <label htmlFor="gameId" className="block mb-2 text-sm font-medium text-gray-300">
                 Game ID
               </label>
               <div className="relative">
-                <Users className="absolute w-5 h-5 text-gray-500 transform -translate-y-1/2 left-3 top-1/2" />
+                <Users className="absolute w-4 h-4 sm:w-5 sm:h-5 text-gray-500 transform -translate-y-1/2 left-3 top-1/2" />
                 <input
                   type="text"
                   id="gameId"
                   value={gameId}
                   onChange={(e) => setGameId(e.target.value.toUpperCase())}
                   placeholder="Enter Game ID"
-                  className="w-full py-3 pl-12 pr-4 text-white placeholder-gray-500 transition-all bg-gray-800 border border-gray-600 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                  className="w-full py-2.5 sm:py-3 pl-10 sm:pl-12 pr-3 sm:pr-4 text-white placeholder-gray-500 transition-all bg-gray-800/80 border border-gray-600 rounded-lg focus:outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-400/20 text-sm sm:text-base"
                   disabled={isLoading}
                 />
               </div>
@@ -133,14 +136,14 @@ const PlayerJoin = ({ onJoin }) => {
                 Your Name
               </label>
               <div className="relative">
-                <User className="absolute w-5 h-5 text-gray-500 transform -translate-y-1/2 left-3 top-1/2" />
+                <User className="absolute w-4 h-4 sm:w-5 sm:h-5 text-gray-500 transform -translate-y-1/2 left-3 top-1/2" />
                 <input
                   type="text"
                   id="playerName"
                   value={playerName}
                   onChange={(e) => setPlayerName(e.target.value)}
                   placeholder="Enter your full name"
-                  className="w-full py-3 pl-12 pr-4 text-white placeholder-gray-500 transition-all bg-gray-800 border border-gray-600 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                  className="w-full py-2.5 sm:py-3 pl-10 sm:pl-12 pr-3 sm:pr-4 text-white placeholder-gray-500 transition-all bg-gray-800/80 border border-gray-600 rounded-lg focus:outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-400/20 text-sm sm:text-base"
                   disabled={isLoading}
                 />
               </div>
@@ -151,14 +154,14 @@ const PlayerJoin = ({ onJoin }) => {
                 Registration Number
               </label>
               <div className="relative">
-                <CreditCard className="absolute w-5 h-5 text-gray-500 transform -translate-y-1/2 left-3 top-1/2" />
+                <CreditCard className="absolute w-4 h-4 sm:w-5 sm:h-5 text-gray-500 transform -translate-y-1/2 left-3 top-1/2" />
                 <input
                   type="text"
                   id="regNo"
                   value={regNo}
                   onChange={(e) => setRegNo(e.target.value)}
                   placeholder="Enter your registration number"
-                  className="w-full py-3 pl-12 pr-4 text-white placeholder-gray-500 transition-all bg-gray-800 border border-gray-600 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                  className="w-full py-2.5 sm:py-3 pl-10 sm:pl-12 pr-3 sm:pr-4 text-white placeholder-gray-500 transition-all bg-gray-800/80 border border-gray-600 rounded-lg focus:outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-400/20 text-sm sm:text-base"
                   disabled={isLoading}
                 />
               </div>
@@ -169,14 +172,14 @@ const PlayerJoin = ({ onJoin }) => {
                 Email Address
               </label>
               <div className="relative">
-                <Mail className="absolute w-5 h-5 text-gray-500 transform -translate-y-1/2 left-3 top-1/2" />
+                <Mail className="absolute w-4 h-4 sm:w-5 sm:h-5 text-gray-500 transform -translate-y-1/2 left-3 top-1/2" />
                 <input
                   type="email"
                   id="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="Enter your email address"
-                  className="w-full py-3 pl-12 pr-4 text-white placeholder-gray-500 transition-all bg-gray-800 border border-gray-600 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                  className="w-full py-2.5 sm:py-3 pl-10 sm:pl-12 pr-3 sm:pr-4 text-white placeholder-gray-500 transition-all bg-gray-800/80 border border-gray-600 rounded-lg focus:outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-400/20 text-sm sm:text-base"
                   disabled={isLoading}
                 />
               </div>
@@ -185,17 +188,17 @@ const PlayerJoin = ({ onJoin }) => {
             <button
               type="submit"
               disabled={isLoading || !gameId.trim() || !playerName.trim() || !regNo.trim() || !email.trim()}
-              className="flex items-center justify-center w-full gap-2 px-6 py-3 font-semibold text-white transition-all duration-200 bg-blue-600 rounded-lg hover:bg-blue-700 disabled:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center justify-center w-full gap-2 px-4 sm:px-6 py-2.5 sm:py-3 font-semibold text-white transition-all duration-300 bg-gradient-to-r from-gray-700 to-black hover:from-gray-600 hover:to-gray-800 rounded-lg shadow-lg hover:shadow-xl transform hover:scale-105 disabled:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none text-sm sm:text-base"
             >
               {isLoading ? (
                 <>
-                  <div className="w-5 h-5 border-2 rounded-full border-white/30 border-t-white animate-spin"></div>
+                  <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 rounded-full border-white/30 border-t-white animate-spin"></div>
                   Joining Game...
                 </>
               ) : (
                 <>
                   Join Game
-                  <ArrowRight className="w-5 h-5" />
+                  <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
                 </>
               )}
             </button>
@@ -203,18 +206,18 @@ const PlayerJoin = ({ onJoin }) => {
         </div>
 
         {/* Instructions Link */}
-        <div className="text-center">
+        <div className="text-center mb-4 sm:mb-6">
           <button
             onClick={handleViewInstructions}
-            className="inline-flex items-center gap-2 font-medium text-blue-400 transition-colors hover:text-blue-300"
+            className="inline-flex items-center gap-2 font-medium text-gray-300 transition-colors hover:text-white text-sm sm:text-base"
           >
-            <BookOpen className="w-5 h-5" />
+            <BookOpen className="w-4 h-4 sm:w-5 sm:h-5" />
             How to Play Tambola
           </button>
         </div>
 
         {/* Footer */}
-        <div className="mt-8 text-sm text-center text-gray-500">
+        <div className="text-xs sm:text-sm text-center text-gray-500 px-2">
           Need a Game ID? Ask your game host to share it with you.
         </div>
       </div>
