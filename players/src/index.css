@@ -71,4 +71,53 @@
       @apply w-12 h-12 text-base;
     }
   }
+  
+  @keyframes appear {
+    0% {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  .animate-appear-staggered {
+    animation: appear 0.5s ease-out forwards;
+  }
+  
+  .animate-pulse-slow {
+    animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  
+  .scale-102 {
+    transform: scale(1.02);
+  }
+  
+  @keyframes bounce-once {
+    0%, 100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-20%);
+    }
+  }
+  
+  .animate-bounce-once {
+    animation: bounce-once 0.5s ease-in-out;
+  }
+  
+  @keyframes shimmer {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
+  }
+  
+  .shimmer {
+    animation: shimmer 3s ease-in-out infinite;
+  }
 }

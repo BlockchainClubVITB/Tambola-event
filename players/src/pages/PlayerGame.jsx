@@ -14,6 +14,7 @@ import {
 import { toast } from 'react-hot-toast'
 import PlayerTicket from '../components/PlayerTicket'
 import CompleteBoard from '../components/CompleteBoard'
+import PlayerQuestionRound from '../components/PlayerQuestionRound'
 import { gameService } from '../utils/gameService'
 import { checkAllWinningConditions, getWinConditionInfo } from '../utils/winningConditions'
 import questionsData from '../data/questions.json'
@@ -962,128 +963,16 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
         {gameState === 'playing' && (
           <>
             {/* Question Popup - Show when number is called */}
-            {showQuestionRound && questionData && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/90 backdrop-blur-sm">
-                <div className="w-full max-w-sm sm:max-w-lg lg:max-w-2xl p-4 sm:p-6 lg:p-8 border shadow-2xl bg-slate-900 border-slate-700 rounded-xl max-h-[95vh] overflow-y-auto">
-                  {/* Header with number and timer */}
-                  <div className="mb-4 sm:mb-6 lg:mb-8 text-center">
-                    <div className="mb-2 sm:mb-4 font-bold text-gray-300 text-4xl sm:text-6xl lg:text-8xl animate-pulse font-mono">
-                      {questionData.id}
-                    </div>
-                    <div className={`text-2xl sm:text-3xl lg:text-4xl font-bold mb-1 sm:mb-2 font-mono ${
-                      questionPhase === 'prep' ? 'text-yellow-400' :
-                      questionPhase === 'question' ? 'text-green-400' : 'text-gray-300'
-                    }`}>
-                      {questionTimer}
-                    </div>
-                    <div className={`text-sm sm:text-lg lg:text-xl ${
-                      questionPhase === 'prep' ? 'text-yellow-300' :
-                      questionPhase === 'question' ? 'text-green-300' : 'text-gray-400'
-                    }`}>
-                      {questionPhase === 'prep' && 'Round starting in...'}
-                      {questionPhase === 'question' && 'seconds to answer'}
-                      {questionPhase === 'scoring' && 'updating leaderboard...'}
-                    </div>
-                  </div>
-
-                  {/* Preparation Phase */}
-                  {questionPhase === 'prep' && (
-                    <div className="py-6 sm:py-8 lg:py-12 text-center">
-                      <div className="mb-4 sm:mb-6 text-2xl sm:text-4xl lg:text-5xl font-bold text-yellow-400">
-                        Get Ready!
-                      </div>
-                      <p className="mb-4 sm:mb-6 text-base sm:text-lg lg:text-xl text-slate-300">
-                        Question {questionData.id} is about to begin...
-                      </p>
-                      <div className="text-sm sm:text-base lg:text-lg text-slate-400 px-2">
-                        {questionData.question}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Question Phase Content */}
-                  {questionPhase === 'question' && (
-                    <div className="space-y-4 sm:space-y-6">
-                      <div className="text-center">
-                        <h2 className="mb-3 sm:mb-4 lg:mb-6 text-lg sm:text-xl lg:text-2xl font-bold text-white">
-                          Question {questionData.id}
-                        </h2>
-                        <p className="mb-4 sm:mb-6 lg:mb-8 text-base sm:text-lg lg:text-xl leading-relaxed text-slate-200 px-2">
-                          {questionData.question}
-                        </p>
-                      </div>
-
-                      <div className="grid grid-cols-1 gap-3 sm:gap-4 mb-4 sm:mb-6">
-                        {questionData.options.map((option, index) => (
-                          <button
-                            key={index}
-                            onClick={() => setSelectedAnswer(index)}
-                            disabled={hasAnswered}
-                            className={`p-3 sm:p-4 lg:p-6 rounded-xl border text-left transition-all touch-manipulation min-h-[3rem] sm:min-h-[3.5rem] ${
-                              selectedAnswer === index
-                                ? 'bg-gray-600 border-gray-500 text-white'
-                                : hasAnswered
-                                ? 'bg-slate-800 border-slate-600 text-slate-400 cursor-not-allowed'
-                                : 'bg-slate-800 border-slate-600 text-white hover:bg-slate-700 hover:border-gray-400 active:bg-slate-600'
-                            }`}
-                          >
-                            <div className="flex items-center space-x-2 sm:space-x-3 lg:space-x-4">
-                              <div className="flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 lg:w-10 lg:h-10 text-xs sm:text-sm lg:text-lg font-bold text-white bg-blue-600 rounded-full flex-shrink-0">
-                                {String.fromCharCode(65 + index)}
-                              </div>
-                              <span className="text-sm sm:text-base lg:text-lg break-words">{option}</span>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-
-                      {/* Submit Button */}
-                      <button
-                        onClick={handleAnswerSubmit}
-                        disabled={selectedAnswer === null || hasAnswered}
-                        className={`w-full px-4 sm:px-6 py-3 sm:py-4 text-base sm:text-lg font-semibold rounded-lg transition-colors touch-manipulation min-h-[3rem] sm:min-h-[3.5rem] ${
-                          hasAnswered 
-                            ? 'bg-slate-600 text-slate-300 cursor-not-allowed' 
-                            : selectedAnswer !== null
-                            ? 'bg-green-600 hover:bg-green-700 active:bg-green-800 text-white' 
-                            : 'bg-slate-600 text-slate-400 cursor-not-allowed'
-                        }`}
-                      >
-                        {hasAnswered ? '✓ Answer Submitted' : selectedAnswer !== null ? 'Submit Answer' : 'Select an answer first'}
-                      </button>
-
-                      {/* Waiting message after answer submitted */}
-                      {hasAnswered && (
-                        <div className="p-3 sm:p-4 mt-3 sm:mt-4 text-center border rounded-lg bg-blue-600/20 border-blue-500/30">
-                          <div className="mb-1 sm:mb-2 text-sm sm:text-base text-blue-400">✓ Answer submitted successfully!</div>
-                          <div className="text-xs sm:text-sm text-blue-300">
-                            Waiting for other players to finish... ({questionTimer}s remaining)
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Scoring Phase */}
-                  {questionPhase === 'scoring' && (
-                    <div className="py-6 sm:py-8 lg:py-12 text-center">
-                      <div className="w-12 h-12 sm:w-16 sm:h-16 lg:w-20 lg:h-20 mx-auto mb-4 sm:mb-6 border-4 rounded-full border-blue-500/30 border-t-blue-500 animate-spin"></div>
-                      <div className="mb-2 sm:mb-4 text-lg sm:text-xl lg:text-2xl font-bold text-blue-400">
-                        Processing Results...
-                      </div>
-                      <p className="text-sm sm:text-base lg:text-lg text-slate-300 px-2">
-                        Updating leaderboard and calculating scores
-                      </p>
-                      {hasAnswered && (
-                        <div className="mt-3 sm:mt-4 text-xs sm:text-sm text-green-400">
-                          ✓ Your answer has been recorded
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
+            <PlayerQuestionRound
+              questionData={questionData}
+              onAnswerSubmit={handleAnswerSubmit}
+              isVisible={showQuestionRound}
+              currentPhase={questionPhase}
+              countdown={questionTimer}
+              hasAnswered={hasAnswered}
+              selectedAnswer={selectedAnswer}
+              setSelectedAnswer={setSelectedAnswer}
+            />
 
             {/* Round Information */}
             {currentRound && (
