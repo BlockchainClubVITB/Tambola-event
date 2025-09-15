@@ -30,6 +30,7 @@ export default {
         'bounce-slow': 'bounce 2s infinite',
         'pulse-slow': 'pulse 3s infinite',
         'number-call': 'numberCall 0.8s ease-in-out',
+        'float': 'float 6s ease-in-out infinite',
       },
       keyframes: {
         numberCall: {
@@ -37,6 +38,10 @@ export default {
           '50%': { transform: 'scale(1.2)', opacity: '1' },
           '100%': { transform: 'scale(1)', opacity: '1' },
         },
+        float: {
+          '0%, 100%': { transform: 'translateY(0)' },
+          '50%': { transform: 'translateY(-20px)' },
+        }
       },
     },
   },

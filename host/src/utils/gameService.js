@@ -433,6 +433,110 @@ export class GameService {
       return { success: false, error: error.message }
     }
   }
+
+  // Get all winners for a specific game and condition
+  async getGameWinners(gameId, condition = null) {
+    try {
+      const queries = [Query.equal('gameId', gameId)]
+      
+      if (condition) {
+        queries.push(Query.equal(condition, true))
+      }
+
+      const response = await databases.listDocuments(
+        this.dbId,
+        this.collections.players,
+        queries
+      )
+
+      // Parse winTimestamps JSON strings for each player
+      const playersWithParsedTimestamps = response.documents.map(player => ({
+        ...player,
+        winTimestamps: player.winTimestamps ? (() => {
+          try {
+            return JSON.parse(player.winTimestamps)
+          } catch (e) {
+            console.warn(`Failed to parse winTimestamps for player ${player.$id}`)
+            return {}
+          }
+        })() : {}
+      }))
+
+      return { success: true, winners: playersWithParsedTimestamps }
+    } catch (error) {
+      console.error('Failed to get game winners:', error)
+      return { success: false, error: error.message }
+    }
+  }
+
+  // OPTIMIZED: Get comprehensive winner data with caching
+  async getAllWinners(gameId, useCache = true) {
+    try {
+      // Simple cache key
+      const cacheKey = `winners_${gameId}`
+      const cacheExpiry = 5000 // 5 seconds cache
+      
+      // Check cache first if enabled
+      if (useCache && this._winnerCache && this._winnerCache[cacheKey]) {
+        const cached = this._winnerCache[cacheKey]
+        if (Date.now() - cached.timestamp < cacheExpiry) {
+          console.log('🔄 Using cached winner data')
+          return cached.data
+        }
+      }
+
+      const winConditions = ['earlyAdopter', 'gasSaver', 'cornerNodes', 'minerOfDay', 'fullBlockchain']
+      const winnerData = {}
+
+      // Get all players with any wins in single query (optimized)
+      const allPlayersResult = await databases.listDocuments(
+        this.dbId,
+        this.collections.players,
+        [
+          Query.equal('gameId', gameId),
+          Query.orderDesc('score') // Order by score for better UX
+        ]
+      )
+
+      if (allPlayersResult.documents) {
+        // Filter winners by condition locally (reduces DB queries from 5 to 1)
+        for (const condition of winConditions) {
+          winnerData[condition] = allPlayersResult.documents.filter(player => player[condition] === true)
+        }
+      } else {
+        // Fallback to individual queries if needed
+        for (const condition of winConditions) {
+          const result = await this.getGameWinners(gameId, condition)
+          winnerData[condition] = result.success ? result.winners : []
+        }
+      }
+
+      const result = { success: true, winners: winnerData }
+      
+      // Cache the result
+      if (!this._winnerCache) this._winnerCache = {}
+      this._winnerCache[cacheKey] = {
+        data: result,
+        timestamp: Date.now()
+      }
+
+      return result
+    } catch (error) {
+      console.error('Failed to get all winners:', error)
+      return { success: false, error: error.message }
+    }
+  }
+
+  // Clear winner cache manually
+  clearWinnerCache(gameId = null) {
+    if (!this._winnerCache) return
+    
+    if (gameId) {
+      delete this._winnerCache[`winners_${gameId}`]
+    } else {
+      this._winnerCache = {}
+    }
+  }
 }
 
 export const gameService = new GameService()
