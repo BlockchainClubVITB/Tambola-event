@@ -2,6 +2,88 @@ import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { gameService } from '../utils/gameService'
 import { Play, Settings, Users } from 'lucide-react'
+import logo from '/assets/logo.png'
+
+const LOGO_SIZE = 112;
+const MARGIN = 20;
+const usedPositions = []
+
+const getRandomPosition = () => {
+  let attempts = 0;
+  const maxAttempts = 50;
+  
+  while (attempts < maxAttempts) {
+    const position = {
+      top: Math.random() * (window.innerHeight - LOGO_SIZE),
+      left: Math.random() * (window.innerWidth - LOGO_SIZE)
+    };
+
+    const hasOverlap = usedPositions.some(usedPos => {
+      const xOverlap = Math.abs(usedPos.left - position.left) < (LOGO_SIZE + MARGIN);
+      const yOverlap = Math.abs(usedPos.top - position.top) < (LOGO_SIZE + MARGIN);
+      return xOverlap && yOverlap;
+    });
+
+    if (!hasOverlap) {
+      usedPositions.push(position);
+      return {
+        top: `${position.top}px`,
+        left: `${position.left}px`
+      };
+    }
+
+    attempts++;
+  }
+
+  return {
+    top: '50%',
+    left: '50%'
+  };
+};
+
+const CryptoIcon = ({ icon }) => {
+  const [position] = useState(getRandomPosition())
+
+  React.useEffect(() => {
+    return () => {
+      const index = usedPositions.findIndex(
+        pos => pos.top === parseInt(position.top) && pos.left === parseInt(position.left)
+      );
+      if (index > -1) {
+        usedPositions.splice(index, 1);
+      }
+    };
+  }, []);
+
+  const cryptoUrls = {
+    bitcoin: '/assets/bitcoin-btc-logo.png',
+    ethereum: '/assets/ethereum-eth-logo.png',
+    binance: '/assets/binance-coin-bnb-logo.png',
+    doge_coin: '/assets/dogecoin-doge-logo.png',
+    black_coin: '/assets/blackcoin-blk-logo.png',
+    solana: '/assets/solana-sol-logo.png',
+    polkadot: '/assets/polkadot-dot-logo.png',
+    chainlink: '/assets/chainlink-link-logo.png',
+    avalanche: '/assets/avalanche-avax-logo.png',
+    polygon: '/assets/polygon-matic-logo.png',
+  }
+
+  return (
+    <img 
+      src={cryptoUrls[icon]} 
+      alt={icon} 
+      className="opacity-40 absolute w-28 h-28 animate-float"
+      style={{ 
+        top: position.top,
+        left: position.left
+      }}
+      onError={(e) => {
+        console.error(`Failed to load crypto icon: ${icon}`)
+        e.target.style.display = 'none'
+      }}
+    />
+  )
+}
 
 const GameSetup = () => {
   const [hostName, setHostName] = useState('')
@@ -38,7 +120,6 @@ const GameSetup = () => {
       
       if (result.success) {
         console.log('Game created successfully:', result)
-        // Navigate to dashboard with game ID
         navigate(`/dashboard?gameId=${result.gameId}`, { 
           state: { 
             gameId: result.gameId, 
@@ -58,9 +139,29 @@ const GameSetup = () => {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen p-4 text-white bg-black">
+    <div className="relative flex items-center justify-center min-h-screen p-4 text-white bg-black overflow-hidden">
+      <CryptoIcon icon="bitcoin" />
+      <CryptoIcon icon="ethereum" />
+      <CryptoIcon icon="binance" />
+      <CryptoIcon icon="doge_coin" />
+      <CryptoIcon icon="black_coin" />
+      <CryptoIcon icon="avalanche" />
+      <CryptoIcon icon="polkadot" />
+      <CryptoIcon icon="solana" />
+      <CryptoIcon icon="polygon" />
+      <CryptoIcon icon="chainlink" />
+
       <div className="w-full max-w-lg">
-        <div className="p-8 bg-gray-900 border border-gray-800 shadow-2xl rounded-xl">
+        <div className="p-8 bg-gray-900/60 backdrop-blur-md border border-gray-800 shadow-2xl rounded-xl">
+          <div className="flex flex-col items-center mb-6">
+            <img 
+              src={logo} 
+              alt="Blockchain Club VITB" 
+              className="h-32 object-contain mb-2"
+            />
+            <h2 className="text-xl font-semibold text-gray-300">Blockchain Club VITB</h2>
+          </div>
+
           <div className="mb-8 text-center">
             <h1 className="mb-2 text-3xl font-bold">Create Tambola Game</h1>
             <p className="text-gray-400">Set up your game and get ready to host!</p>
@@ -70,7 +171,7 @@ const GameSetup = () => {
             <div>
               <label htmlFor="hostName" className="block mb-2 text-sm font-medium">
                 <Users className="inline w-4 h-4 mr-2" />
-                Host Name *
+                Host Name <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
