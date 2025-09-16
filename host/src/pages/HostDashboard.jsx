@@ -450,20 +450,31 @@ const HostDashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white p-4">
-      <div className="max-w-7xl mx-auto">
-        {/* Blockchain Club VITB Header */}
-        <div className="flex items-center justify-center mb-6">
+  <div className="relative flex items-center justify-center min-h-screen p-4 text-white bg-black overflow-hidden">
+      {/* Glassmorphism background shapes */}
+      <div className="absolute top-0 left-0 w-full h-full pointer-events-none z-0">
+        <div className="absolute left-[-100px] top-[-100px] w-[400px] h-[400px] bg-gradient-to-br from-blue-500/30 to-purple-500/20 rounded-full blur-3xl opacity-70 animate-pulse"></div>
+        <div className="absolute right-[-120px] bottom-[-120px] w-[350px] h-[350px] bg-gradient-to-tr from-pink-500/20 to-yellow-500/10 rounded-full blur-2xl opacity-60 animate-pulse"></div>
+        <div className="absolute left-1/2 top-1/3 w-[200px] h-[200px] bg-gradient-to-br from-green-400/20 to-blue-400/10 rounded-full blur-2xl opacity-40 animate-pulse"></div>
+      </div>
+      <div className="max-w-7xl mx-auto w-full z-10">
+        {/* Blockchain Club VITB Header (glass card) */}
+        <div className="mb-6 p-6 bg-gray-900/60 backdrop-blur-md border border-gray-800 shadow-2xl rounded-xl flex items-center justify-between transform transition-all duration-700 ease-out opacity-0 animate-fade-in-up">
           <div className="flex items-center gap-4">
             <img 
               src="/logo.png" 
               alt="Blockchain Club VITB" 
-              className="w-12 h-12 object-contain"
+              className="w-14 h-14 object-contain"
             />
-            <div className="text-center">
-              <h1 className="text-2xl font-bold gradient-text">Blockchain Club VITB</h1>
-              <p className="text-lg text-gray-300 font-semibold">Blockchain Tambola</p>
+            <div className="text-left">
+              <h1 className="text-2xl font-extrabold tracking-tight text-white">Blockchain Club VITB</h1>
             </div>
+          </div>
+          <div className="text-right">
+            <h1 className="text-3xl lg:text-4xl font-extrabold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-purple-400 to-yellow-300 drop-shadow-lg animate-gradient-x">
+              Decrypt2Win
+            </h1>
+            <p className="text-base text-gray-200 font-semibold italic tracking-wide mt-1">Blockchain Tambola</p>
           </div>
         </div>
 
@@ -498,7 +509,7 @@ const HostDashboard = () => {
           <div className="flex items-center gap-3">
             <button
               onClick={refreshAllData}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 rounded-lg shadow-md transition-all transform hover:-translate-y-0.5 active:translate-y-0.5"
             >
               <RotateCcw className="w-4 h-4" />
               Refresh All
@@ -506,7 +517,7 @@ const HostDashboard = () => {
             
             <button
               onClick={handleShareGame}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 rounded-lg shadow-md transition-all transform hover:-translate-y-0.5 active:translate-y-0.5"
             >
               <Share2 className="w-4 h-4" />
               Share Game
@@ -514,7 +525,7 @@ const HostDashboard = () => {
             
             <button
               onClick={handlePauseGame}
-              className={`flex items-center gap-2 px-4 py-2 ${gameState === 'paused' ? 'bg-green-600 hover:bg-green-700' : 'bg-orange-600 hover:bg-orange-700'} rounded-lg transition-colors`}
+              className={`flex items-center gap-2 px-4 py-2 ${gameState === 'paused' ? 'bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700' : 'bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700'} rounded-lg shadow-md transition-all text-white`}
             >
               {gameState === 'paused' ? (
                 <>
@@ -531,7 +542,7 @@ const HostDashboard = () => {
             
             <button
               onClick={handleResetGame}
-              className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 rounded-lg shadow-md transition-all transform hover:-translate-y-0.5 active:translate-y-0.5 text-white"
             >
               <RotateCcw className="w-4 h-4" />
               Reset
@@ -541,7 +552,7 @@ const HostDashboard = () => {
 
         {/* Game Status Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-gray-800 border border-gray-600 rounded-xl p-4">
+          <div className="p-4 bg-gray-900/50 backdrop-blur-sm border border-gray-800 rounded-xl">
             <div className="flex items-center gap-3">
               <div className={`w-3 h-3 rounded-full ${
                 gameState === 'waiting' ? 'bg-yellow-500' :
@@ -554,21 +565,21 @@ const HostDashboard = () => {
             </div>
           </div>
 
-          <div className="bg-gray-800 border border-gray-600 rounded-xl p-4">
+          <div className="p-4 bg-gray-900/50 backdrop-blur-sm border border-gray-800 rounded-xl transform transition-all duration-500 ease-out opacity-0 animate-fade-in-up">
             <div className="flex items-center gap-3">
               <Clock className="w-5 h-5 text-blue-400" />
               <span className="text-white">Numbers Called: {selectedNumbers.length}/50</span>
             </div>
           </div>
 
-          <div className="bg-gray-800 border border-gray-600 rounded-xl p-4">
+          <div className="p-4 bg-gray-900/50 backdrop-blur-sm border border-gray-800 rounded-xl transform transition-all duration-500 ease-out opacity-0 animate-fade-in-up delay-75">
             <div className="flex items-center gap-3">
               <Users className="w-5 h-5 text-green-400" />
               <span className="text-white">Players: {players.length}</span>
             </div>
           </div>
 
-          <div className="bg-gray-800 border border-gray-600 rounded-xl p-4">
+          <div className="p-4 bg-gray-900/50 backdrop-blur-sm border border-gray-800 rounded-xl transform transition-all duration-500 ease-out opacity-0 animate-fade-in-up delay-150">
             <div className="flex items-center gap-3">
               <span className="text-white">Phase: </span>
               <span className={`font-bold ${
@@ -607,14 +618,16 @@ const HostDashboard = () => {
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Left Column - Complete Board */}
           <div className="lg:col-span-2 space-y-6">
-            <CompleteBoard
+            <div className="p-6 bg-gray-900/60 backdrop-blur-md border border-gray-800 rounded-xl shadow-2xl transform transition-all duration-500 ease-out opacity-0 animate-fade-in-up">
+              <CompleteBoard
               selectedNumbers={selectedNumbers}
               currentNumber={currentNumber}
               onNumberClick={handleNumberClick}
             />
+            </div>
             
             {/* Winners Board Section */}
-            <div className="card p-6">
+            <div className="p-6 bg-gray-900/60 backdrop-blur-md border border-gray-800 rounded-xl shadow-2xl transform transition-all duration-500 ease-out opacity-0 animate-fade-in-up delay-100">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
                   <Trophy className="w-6 h-6 text-yellow-400" />
@@ -749,13 +762,13 @@ const HostDashboard = () => {
           </div>
 
           {/* Right Column - Leaderboard */}
-          <div className="space-y-6">
+          <div className="space-y-6 transform transition-all duration-500 ease-out opacity-0 animate-fade-in-up delay-150">
             <div>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-white">Leaderboard</h3>
                 <button
                   onClick={refreshAllData}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                  className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg hover:opacity-95 shadow-md transition-all"
                 >
                   Refresh All
                 </button>
