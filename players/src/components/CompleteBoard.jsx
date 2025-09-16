@@ -1,142 +1,157 @@
-import React from 'react'
-import { CheckCircle, Clock, X } from 'lucide-react'
+import React from 'react';
+import { CheckCircle, Clock, X, Hash, Target, Trophy } from 'lucide-react';
 
-const CompleteBoard = ({ 
-  selectedNumbers = [], 
-  currentNumber = null, 
+const StatCard = ({ icon, label, value, color }) => (
+  <div className="bg-slate-800 p-8 rounded-lg flex flex-row items-center gap-4 transition-colors hover:bg-slate-700 border border-slate-700">
+    <div className="text-slate-400">{icon}</div>
+    <div className="flex-grow text-center">
+      <div className={`font-bold ${color} text-2xl`}>{value}</div>
+      <div className="text-xs text-slate-500 uppercase tracking-wider mt-1">{label}</div>
+    </div>
+  </div>
+);
+
+const LegendItem = ({ color, label, border = 'border-slate-600' }) => (
+  <div className="flex items-center gap-2">
+    <div className={`w-3 h-3 rounded-sm border ${border} ${color}`}></div>
+    <span className="text-xs text-slate-400">{label}</span>
+  </div>
+);
+
+const CompleteBoard = ({
+  selectedNumbers = [],
+  currentNumber = null,
   processedQuestions = new Set(),
   correctlyAnsweredNumbers = new Set(),
   playerWins = {}
 }) => {
-  // Generate all numbers 1-50
-  const allNumbers = Array.from({ length: 50 }, (_, i) => i + 1)
+  const allNumbers = Array.from({ length: 50 }, (_, i) => i + 1);
 
   const getNumberStatus = (number) => {
-    if (number === currentNumber) return 'current'
-    if (correctlyAnsweredNumbers.has(number)) return 'correct'
-    if (processedQuestions.has(number)) return 'processed'
-    if (selectedNumbers.includes(number)) return 'selected'
-    return 'available'
-  }
+    if (number === currentNumber) return 'current';
+    if (correctlyAnsweredNumbers.has(number)) return 'correct';
+    if (processedQuestions.has(number)) return 'processed';
+    if (selectedNumbers.includes(number)) return 'selected';
+    return 'available';
+  };
 
-  const getNumberClass = (number) => {
-    const status = getNumberStatus(number)
-    
+  const getNumberClass = (status) => {
     switch (status) {
       case 'current':
-        return 'bg-yellow-500 text-black border-yellow-400 shadow-lg animate-pulse'
+        return 'bg-yellow-500 text-black border-yellow-400 shadow-lg animate-pulse';
       case 'correct':
-        return 'bg-green-600 text-white border-green-400 shadow-lg'
+        return 'bg-green-600 text-white border-green-400 shadow-lg';
       case 'processed':
-        return 'bg-red-900 text-red-300 border-red-600 blur-sm opacity-75 line-through'
+        return 'bg-red-900 text-red-300 border-red-600 blur-sm opacity-75 line-through';
       case 'selected':
-        return 'bg-gray-700 text-green-400 border-green-600'
+        return 'bg-slate-700 text-green-400 border-green-600';
       case 'available':
-        return 'bg-gray-800 text-gray-300 border-gray-700'
+        return 'bg-slate-800 text-slate-300 border-slate-700 transition-colors hover:bg-slate-700 cursor-pointer';
       default:
-        return 'bg-gray-800 text-gray-300 border-gray-700'
+        return 'bg-slate-800 text-slate-300 border-slate-700';
     }
-  }
+  };
+
+  const totalCalled = selectedNumbers.length;
+  const totalCorrect = correctlyAnsweredNumbers.size;
+  const totalWins = Object.values(playerWins).filter(Boolean).length;
 
   return (
-    <div className="card p-3 sm:p-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-3 sm:mb-4 gap-2">
-        <h3 className="text-base sm:text-lg font-semibold flex items-center gap-2">
-          <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400" />
-          Game Board (1-50)
-        </h3>
-        <div className="text-xs sm:text-sm text-gray-400">
-          Called: {selectedNumbers.length}/50
-        </div>
-      </div>
-
-      {/* Legend */}
-      <div className="flex items-center gap-2 sm:gap-4 mb-3 sm:mb-4 text-xs sm:text-sm flex-wrap">
-        <div className="flex items-center gap-1 sm:gap-2">
-          <div className="w-3 h-3 sm:w-4 sm:h-4 bg-yellow-500 rounded border"></div>
-          <span>Current</span>
-        </div>
-        <div className="flex items-center gap-1 sm:gap-2">
-          <div className="w-3 h-3 sm:w-4 sm:h-4 bg-green-600 rounded border"></div>
-          <span>Correct</span>
-        </div>
-        <div className="flex items-center gap-1 sm:gap-2">
-          <div className="w-3 h-3 sm:w-4 sm:h-4 bg-gray-700 border border-green-600 rounded"></div>
-          <span>Called</span>
-        </div>
-        <div className="flex items-center gap-1 sm:gap-2">
-          <div className="w-3 h-3 sm:w-4 sm:h-4 bg-red-900 border border-red-600 rounded blur-sm opacity-75"></div>
-          <span>Failed</span>
-        </div>
-        <div className="flex items-center gap-1 sm:gap-2">
-          <div className="w-3 h-3 sm:w-4 sm:h-4 bg-gray-800 border border-gray-700 rounded"></div>
-          <span>Not Called</span>
-        </div>
-      </div>
-
-      {/* Board Grid */}
-      <div className="grid grid-cols-10 gap-0.5 sm:gap-1 max-w-full sm:max-w-4xl mx-auto overflow-x-auto">
-        {allNumbers.map(number => (
-          <div
-            key={number}
-            className={`
-              w-7 h-7 sm:w-10 sm:h-10 flex items-center justify-center text-xs sm:text-sm font-bold rounded border transition-all duration-300 relative
-              ${getNumberClass(number)}
-            `}
-            title={`Number ${number} - ${getNumberStatus(number)}`}
-          >
-            {getNumberStatus(number) === 'correct' ? (
-              <div className="relative">
-                <span className="font-bold">{number}</span>
-                <CheckCircle className="w-2 h-2 sm:w-3 sm:h-3 text-green-200 absolute -top-0.5 -right-0.5 sm:-top-1 sm:-right-1" />
-              </div>
-            ) : processedQuestions.has(number) ? (
-              <div className="relative">
-                <span className="opacity-50">{number}</span>
-                <X className="w-4 h-4 sm:w-6 sm:h-6 text-red-500 absolute inset-0 m-auto" />
-              </div>
-            ) : (
-              number
-            )}
+    <div className="bg-slate-800/50 text-white p-4 sm:p-6 w-full flex flex-col font-sans rounded-xl">
+      <main className="flex-grow flex flex-col-reverse lg:flex-row gap-6 lg:gap-8">
+        
+        <div className="flex-grow lg:w-3/4 bg-slate-800 p-4 sm:p-6 rounded-xl border border-slate-700 flex flex-col">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+            <div>
+              <h3 className="text-lg sm:text-xl font-semibold flex items-center gap-2">
+                <Clock className="w-5 h-5 text-blue-400" />
+                Game Board
+              </h3>
+              <p className="text-sm text-slate-400 mt-1">Called: {totalCalled}/50</p>
+            </div>
+            <div className="flex flex-wrap items-center justify-start sm:justify-end gap-x-3 sm:gap-x-4 gap-y-2">
+              <LegendItem color="bg-yellow-500" border="border-yellow-400" label="Current" />
+              <LegendItem color="bg-green-600" border="border-green-400" label="Correct" />
+              <LegendItem color="bg-slate-700" border="border-green-600" label="Called" />
+              <LegendItem color="bg-red-900" border="border-red-600" label="Failed" />
+              <LegendItem color="bg-slate-800" border="border-slate-700" label="Not Called" />
+            </div>
           </div>
-        ))}
-      </div>
+          
+          <div className="flex-grow grid grid-cols-10 gap-1 sm:gap-2 w-full lg:w-4/5 mx-auto">
+            {allNumbers.map(number => {
+              const status = getNumberStatus(number);
+              const className = getNumberClass(status);
+              return (
+                <div
+                  key={number}
+                  className={`aspect-square flex items-center justify-center text-sm sm:text-base font-bold rounded-lg border transition-all duration-300 relative ${className}`}
+                  title={`Number ${number}: ${status.charAt(0).toUpperCase() + status.slice(1)}`}
+                >
+                  {status === 'correct' ? (
+                    <>
+                      <span className="font-bold">{number}</span>
+                      <CheckCircle className="w-3 h-3 text-green-200 absolute top-1 right-1" />
+                    </>
+                  ) : status === 'processed' ? (
+                    <>
+                      <span className="opacity-50">{number}</span>
+                      <X className="w-5 h-5 sm:w-6 sm:h-6 text-red-500 absolute inset-0 m-auto" />
+                    </>
+                  ) : (
+                    number
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          
+          <div className="mt-6">
+            <div className="flex justify-between text-sm text-slate-400 mb-2">
+              <span>Game Progress</span>
+              <span className="font-semibold text-white">{Math.round((totalCalled / 50) * 100)}%</span>
+            </div>
+            <div className="w-full bg-slate-700 rounded-full h-2.5">
+              <div 
+                className="bg-gradient-to-r from-green-500 to-emerald-500 h-2.5 rounded-full transition-all duration-500"
+                style={{ width: `${(totalCorrect / 50) * 100}%` }}
+              ></div>
+            </div>
+          </div>
+        </div>
 
-      {/* Statistics */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 mt-4 sm:mt-6">
-        <div className="bg-gray-800 rounded-lg p-2 sm:p-3 text-center">
-          <div className="text-lg sm:text-2xl font-bold text-green-400">{correctlyAnsweredNumbers.size}</div>
-          <div className="text-xs text-gray-400">Correct</div>
+        <div className="w-full lg:w-1/4">
+           <div className="grid grid-cols-2 lg:flex lg:flex-col lg:justify-between gap-4 h-full">
+              <StatCard 
+                icon={<CheckCircle className="w-6 h-6"/>} 
+                label="Correct" 
+                value={totalCorrect}
+                color="text-green-400"
+              />
+              <StatCard 
+                icon={<Hash className="w-6 h-6"/>} 
+                label="Called" 
+                value={totalCalled}
+                color="text-slate-300"
+              />
+              <StatCard 
+                icon={<Target className="w-6 h-6"/>} 
+                label="Current" 
+                value={currentNumber || '–'}
+                color="text-yellow-400"
+              />
+               <StatCard 
+                icon={<Trophy className="w-6 h-6"/>} 
+                label="Wins" 
+                value={totalWins}
+                color="text-purple-400"
+              />
+           </div>
         </div>
-        <div className="bg-gray-800 rounded-lg p-2 sm:p-3 text-center">
-          <div className="text-lg sm:text-2xl font-bold text-gray-300">{selectedNumbers.length}</div>
-          <div className="text-xs text-gray-400">Called</div>
-        </div>
-        <div className="bg-gray-800 rounded-lg p-2 sm:p-3 text-center">
-          <div className="text-lg sm:text-2xl font-bold text-yellow-400">{currentNumber || '-'}</div>
-          <div className="text-xs text-gray-400">Current</div>
-        </div>
-        <div className="bg-gray-800 rounded-lg p-2 sm:p-3 text-center">
-          <div className="text-lg sm:text-2xl font-bold text-purple-400">{Object.values(playerWins).filter(Boolean).length}</div>
-          <div className="text-xs text-gray-400">Wins</div>
-        </div>
-      </div>
-
-      {/* Progress Bar */}
-      <div className="mt-3 sm:mt-4">
-        <div className="flex justify-between text-xs sm:text-sm text-gray-400 mb-1">
-          <span>Correct Answers Progress</span>
-          <span>{Math.round((correctlyAnsweredNumbers.size / 50) * 100)}%</span>
-        </div>
-        <div className="w-full bg-gray-700 rounded-full h-1.5 sm:h-2">
-          <div 
-            className="bg-gradient-to-r from-green-500 to-emerald-500 h-1.5 sm:h-2 rounded-full transition-all duration-500"
-            style={{ width: `${(correctlyAnsweredNumbers.size / 50) * 100}%` }}
-          ></div>
-        </div>
-      </div>
+      </main>
     </div>
-  )
-}
+  );
+};
 
-export default CompleteBoard
+export default CompleteBoard;
+
