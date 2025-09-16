@@ -62,7 +62,7 @@ const CryptoIcon = ({ icon }) => {
     doge_coin: '/assets/dogecoin-doge-logo.png',
     black_coin: '/assets/blackcoin-blk-logo.png',
     solana: '/assets/solana-sol-logo.png',
-    polkadot: '/assets/polkadot-dot-logo.png',
+    polkadot: '/assets/polkadot-new-dot-logo.png',
     chainlink: '/assets/chainlink-link-logo.png',
     avalanche: '/assets/avalanche-avax-logo.png',
     polygon: '/assets/polygon-matic-logo.png',
@@ -72,7 +72,7 @@ const CryptoIcon = ({ icon }) => {
     <img 
       src={cryptoUrls[icon]} 
       alt={icon} 
-      className="opacity-40 absolute w-28 h-28 animate-float"
+      className="absolute opacity-40 w-28 h-28 animate-float"
       style={{ 
         top: position.top,
         left: position.left
@@ -139,7 +139,7 @@ const GameSetup = () => {
   }
 
   return (
-    <div className="relative flex items-center justify-center min-h-screen p-4 text-white bg-black overflow-hidden">
+    <div className="relative flex items-center justify-center min-h-screen p-4 overflow-hidden text-white bg-black">
       <CryptoIcon icon="bitcoin" />
       <CryptoIcon icon="ethereum" />
       <CryptoIcon icon="binance" />
@@ -152,12 +152,12 @@ const GameSetup = () => {
       <CryptoIcon icon="chainlink" />
 
       <div className="w-full max-w-lg">
-        <div className="p-8 bg-gray-900/60 backdrop-blur-md border border-gray-800 shadow-2xl rounded-xl">
+        <div className="p-8 border border-gray-800 shadow-2xl bg-gray-900/60 backdrop-blur-md rounded-xl">
           <div className="flex flex-col items-center mb-6">
             <img 
               src={logo} 
               alt="Blockchain Club VITB" 
-              className="h-32 object-contain mb-2"
+              className="object-contain h-32 mb-2"
             />
             <h2 className="text-xl font-semibold text-gray-300">Blockchain Club VITB</h2>
           </div>

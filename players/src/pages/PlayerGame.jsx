@@ -50,6 +50,8 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
   const [isRealTimeConnected, setIsRealTimeConnected] = useState(false) // Track real-time connection status
   const [playerWins, setPlayerWins] = useState({}) // Track player's winning conditions
   const [showRulesPopup, setShowRulesPopup] = useState(false) // Track rules popup visibility
+  const [playerScore, setPlayerScore] = useState(0) // Track player's current score
+  const [playerPosition, setPlayerPosition] = useState(null) // Track player's leaderboard position
   const questionTimerRef = useRef(null)
   const hasShownRestorationRef = useRef(false) // Track if we've shown restoration message
   const gameSubscriptionRef = useRef(null) // Store real-time subscription
@@ -101,6 +103,7 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
   const startGamePolling = () => {
     // Single initial fetch only - no continuous polling
     fetchGameState()
+    fetchPlayerScoreAndPosition() // Fetch initial score and position
     
     // Set up real-time subscription for host events
     setupRealTimeSubscription()
@@ -123,7 +126,7 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
             gameData: updatedGame,
             totalPlayers: updatedGame.playerCount || 0
           }))
-          toast.success('🚀 Game started by host! Get ready!', { duration: 4000 })
+          toast.success('🚀 Game started! Get ready!', { duration: 3000 })
         },
         
         onNumberCalled: (updatedGame) => {
@@ -143,10 +146,9 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
           // Handle status changes
           if (updatedGame.status === 'finished' && gameState !== 'finished') {
             setGameState('finished')
-            toast.success('🏆 Game finished by host!')
+            toast.success('🏆 Game finished!')
           } else if (updatedGame.status === 'waiting' && gameState !== 'waiting') {
             setGameState('waiting')
-            toast('⏳ Game reset by host...', { icon: '🔄' })
           }
         }
       })
@@ -155,16 +157,15 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
         gameSubscriptionRef.current = subscription.subscriptionId
         setIsRealTimeConnected(true)
         console.log('✅ Real-time subscription active!')
-        toast.success('🔔 Connected to host for live updates!', { duration: 3000 })
       } else {
         setIsRealTimeConnected(false)
         console.error('❌ Failed to set up real-time subscription:', subscription.error)
-        toast.error('⚠️ Real-time updates unavailable, use refresh button')
+        toast.error('⚠️ Real-time connection failed')
       }
       
     } catch (error) {
       console.error('❌ Real-time subscription error:', error)
-      toast.error('⚠️ Real-time connection failed')
+      setIsRealTimeConnected(false)
     }
   }
 
@@ -213,13 +214,11 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
         // Check for game state changes
         if (game.status === 'active' && gameState !== 'playing') {
           setGameState('playing')
-          toast.success('🎯 Game started by host! Get ready!')
         } else if (game.status === 'finished' && gameState !== 'finished') {
           setGameState('finished')
           toast.success('🏆 Game finished!')
         } else if (game.status === 'waiting' && gameState !== 'waiting') {
           setGameState('waiting')
-          toast('⏳ Game reset to waiting...', { icon: '🔄' })
         }
         
         // Check for new numbers only when explicitly called
@@ -237,7 +236,6 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
       }
     } catch (error) {
       console.error('Failed to listen for host events:', error)
-      toast.error('Failed to connect to host')
     }
   }
 
@@ -258,9 +256,9 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
         setHasAnswered(false)
         setShowQuestionRound(true)
         startQuestionWorkflow() // Synchronized 5s+30s+5s workflow
-        toast.success(`🎯 Number ${newNumber} called by host!`)
+        toast.success(`Number ${newNumber} called!`, { duration: 2000 })
       } else {
-        toast.success(`📢 Number ${newNumber} called (No question available)`)
+        // No question available for this number
         setIsQuestionActive(false)
       }
     }
@@ -303,7 +301,6 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
             // Mark all existing numbers as processed (restoration)
             setProcessedQuestions(new Set(existingNumbers))
             hasShownRestorationRef.current = true
-            toast.success(`Game in progress! Latest number: ${latestNumber}`)
           }
         }
 
@@ -316,6 +313,27 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
       }
     } catch (error) {
       console.error('Failed to fetch game state:', error)
+    }
+  }
+
+  // Fetch player's current score and leaderboard position
+  const fetchPlayerScoreAndPosition = async () => {
+    try {
+      const storedPlayer = localStorage.getItem('tambola_player')
+      const currentGameId = storedPlayer ? JSON.parse(storedPlayer).gameId : (gameId || playerData?.gameId)
+      const playerId = storedPlayer ? JSON.parse(storedPlayer).id : playerData?.id
+      
+      if (!currentGameId || !playerId) return
+
+      // Fetch player's current score and position
+      const result = await gameService.getPlayerScoreAndPosition(currentGameId, playerId)
+      if (result.success) {
+        setPlayerScore(result.score || 0)
+        setPlayerPosition(result.position || null)
+        console.log('📊 Updated player stats:', { score: result.score, position: result.position })
+      }
+    } catch (error) {
+      console.error('Failed to fetch player score and position:', error)
     }
   }
 
@@ -368,7 +386,7 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
       if (timeLeft <= 0) {
         clearInterval(questionTimer)
         if (!hasAnswered) {
-          toast.error('⏰ Time up! No answer submitted')
+          // Don't show toast for timeout - it's expected behavior
         }
         console.log('✅ Question phase complete, starting scoring phase')
         startScoringPhase()
@@ -400,10 +418,7 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
   }
 
   const endQuestionRound = () => {
-    // Show completion synchronized with host
-    if (questionData) {
-      toast.success(`✅ Question ${questionData.id} completed! Leaderboard updated.`)
-    }
+    // Show completion synchronized with host - remove redundant toast
     
     // Clean up timer
     if (questionTimerRef.current) {
@@ -448,7 +463,7 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
       // Check for winning conditions and get new wins
       const newWins = await checkWinningConditions(newCorrectNumbers)
       
-      toast.success('🎉 Correct answer! +10 points')
+      toast.success('✅ Correct! +10 pts', { duration: 2000 })
       
       // OPTIMIZED: Single database request with score + wins + correctNumbers (async, non-blocking)
       setTimeout(async () => {
@@ -471,7 +486,11 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
             
             if (result.success) {
               console.log('✅ OPTIMIZED: All player data updated in single request')
-              toast.success(`💾 Progress saved! Score: ${result.newScore || 'N/A'} points`)
+              
+              // Update player score from response
+              if (result.newScore !== undefined) {
+                setPlayerScore(result.newScore)
+              }
               
               // Update local state with only the wins that were actually awarded
               if (result.newWins && Object.keys(result.newWins).length > 0) {
@@ -482,8 +501,8 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
                 for (const [condition, won] of Object.entries(result.newWins)) {
                   if (won) {
                     const info = winInfo[condition]
-                    toast.success(`🏆 ${info.icon} ${info.name} - ${info.description}!`, {
-                      duration: 6000,
+                    toast.success(`🏆 ${info.icon} ${info.name}!`, {
+                      duration: 5000,
                       style: {
                         background: '#059669',
                         color: 'white',
@@ -499,8 +518,8 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
                 const winInfo = getWinConditionInfo()
                 for (const condition of result.deniedWins) {
                   const info = winInfo[condition]
-                  toast(`🚫 ${info.name} already won by another player!`, {
-                    duration: 4000,
+                  toast(`🚫 ${info.name} already won!`, {
+                    duration: 3000,
                     style: {
                       background: '#DC2626',
                       color: 'white',
@@ -511,28 +530,25 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
             } else {
               console.error('❌ Failed to save progress:', result.error)
               // Auto-refresh fallback on failure
-              toast.error('⚠️ Save failed, will retry automatically')
               setTimeout(() => handleReload(), 2000)
             }
           }
         } catch (error) {
           console.error('❌ Failed to save correct answer:', error)
           // Auto-refresh fallback on error
-          toast.error('⚠️ Connection issue, refreshing...')
           setTimeout(() => handleReload(), 3000)
         }
       }, 100) // Small delay to avoid blocking UI
     } else {
       // Wrong answer - immediate feedback, no database call needed
-      toast.error('❌ Wrong answer! Better luck next time.')
+      toast.error('❌ Wrong answer!', { duration: 2000 })
       console.log('❌ Wrong answer, not sending to database')
       
       // Track incorrect answer for Early Adopter condition
       setIncorrectlyAnsweredNumbers(prev => new Set([...prev, questionData.id]))
     }
     
-    // Show submission confirmation
-    toast('✅ Answer submitted!', { icon: '📝', duration: 2000 })
+    // No need for submission confirmation toast - too many toasts
   }
 
   // Check winning conditions after each correct answer (with local caching)
@@ -696,7 +712,7 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
   // Enhanced manual refresh with auto-retry and fallback mechanisms
   const handleReload = async () => {
     try {
-      toast.success('🔄 Refreshing connection to host...')
+      console.log('🔄 Refreshing connection to host...')
       
       // Re-establish real-time connection if lost
       if (!gameSubscriptionRef.current || !isRealTimeConnected) {
@@ -711,15 +727,16 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
       // Refresh leaderboard if available
       try {
         await fetchGameState()
+        await fetchPlayerScoreAndPosition() // Fetch updated score and position
         console.log('✅ Game state refreshed successfully')
       } catch (error) {
         console.warn('⚠️ Game state refresh had issues:', error)
       }
       
-      toast.success('✅ Connection refreshed!')
+      toast.success('Refreshed!', { duration: 1500 })
     } catch (error) {
       console.error('❌ Refresh failed:', error)
-      toast.error('❌ Refresh failed, retrying in 5 seconds...')
+      toast.error('Refresh failed, retrying...', { duration: 2000 })
       
       // Auto-retry on failure
       setTimeout(() => {
@@ -735,15 +752,12 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
 
     if (!isRealTimeConnected && gameState === 'playing') {
       console.log('⚠️ Real-time disconnected, starting auto-refresh fallback')
-      toast('📡 Real-time lost, using auto-refresh mode', { 
-        icon: '⚠️',
-        duration: 4000 
-      })
       
       // Auto-refresh every 10 seconds when real-time is down
       autoRefreshInterval = setInterval(() => {
         console.log('🔄 Auto-refresh triggered (real-time fallback)')
         listenForHostEvents()
+        fetchPlayerScoreAndPosition() // Update score and position during auto-refresh
       }, 10000)
     }
 
@@ -755,8 +769,8 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
   }, [isRealTimeConnected, gameState])
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-gray-800 p-2 sm:p-4 lg:p-6 text-white">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen p-2 text-white bg-gradient-to-br from-black via-gray-900 to-gray-800 sm:p-4 lg:p-6">
+      <div className="mx-auto max-w-7xl">
         {/* Header with Logo, Club Name and Decrypt2win */}
         <div className="flex items-center justify-between mb-3 sm:mb-4">
           <div className="flex items-center gap-2 sm:gap-3">
@@ -765,34 +779,34 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
               alt="Blockchain Club VITB" 
               className="object-contain w-6 h-6 sm:w-8 sm:h-8"
             />
-            <h1 className="text-base sm:text-lg font-bold bg-gradient-to-r from-gray-300 to-white bg-clip-text text-transparent" style={{fontFamily: 'Fira Code, monospace'}}>
+            <h1 className="text-base font-bold text-transparent sm:text-lg bg-gradient-to-r from-gray-300 to-white bg-clip-text" style={{fontFamily: 'Fira Code, monospace'}}>
               Blockchain Club VITB
             </h1>
           </div>
           <div className="text-right">
-            <h2 className="text-base sm:text-lg font-bold bg-gradient-to-r from-gray-300 to-white bg-clip-text text-transparent" style={{fontFamily: 'Fira Code, monospace'}}>
+            <h2 className="text-base font-bold text-transparent sm:text-lg bg-gradient-to-r from-gray-300 to-white bg-clip-text" style={{fontFamily: 'Fira Code, monospace'}}>
               Decrypt2win
             </h2>
           </div>
         </div>
 
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6 gap-3 sm:gap-4">
-          <div className="min-w-0 flex-1">
-            <h1 className="mb-1 text-xl sm:text-2xl lg:text-3xl font-bold text-white truncate" style={{fontFamily: 'Fira Code, monospace'}}>Player</h1>
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-400">
+        <div className="flex flex-col justify-between gap-3 mb-4 sm:flex-row sm:items-center sm:mb-6 sm:gap-4">
+          <div className="flex-1 min-w-0">
+            <h1 className="mb-1 text-xl font-bold text-white truncate sm:text-2xl lg:text-3xl" style={{fontFamily: 'Fira Code, monospace'}}>Player</h1>
+            <div className="flex flex-col gap-2 text-xs text-gray-400 sm:flex-row sm:items-center sm:gap-4 sm:text-sm">
               <span className="flex items-center gap-1 truncate">
-                <User className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
+                <User className="flex-shrink-0 w-3 h-3 sm:w-4 sm:h-4" />
                 <span className="truncate">{playerData?.name || playerName || 'Player'}</span>
               </span>
               <span className="flex items-center gap-1 truncate">
-                <GamepadIcon className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
+                <GamepadIcon className="flex-shrink-0 w-3 h-3 sm:w-4 sm:h-4" />
                 <span className="truncate">Game: {playerData?.gameId || gameId || 'Unknown'}</span>
               </span>
             </div>
           </div>
           
-          <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
+          <div className="flex flex-wrap items-center gap-1 sm:gap-2">
             <button
               onClick={() => setShowRulesPopup(true)}
               className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 lg:px-4 py-1.5 sm:py-2 text-xs sm:text-sm transition-colors bg-green-600 rounded-lg hover:bg-green-700"
@@ -822,15 +836,15 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
         </div>
 
         {/* Game Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 lg:gap-4 mb-4 sm:mb-6">
-          <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-xl shadow-2xl p-3 sm:p-4">
+        <div className="grid grid-cols-2 gap-2 mb-4 sm:grid-cols-6 sm:gap-3 lg:gap-4 sm:mb-6">
+          <div className="p-3 border shadow-2xl bg-white/10 backdrop-blur-md border-white/20 rounded-xl sm:p-4">
             <div className="flex items-center gap-2 sm:gap-3">
               <div className={`w-2 h-2 sm:w-3 sm:h-3 rounded-full ${
                 gameState === 'loading' ? 'bg-gray-500' :
                 gameState === 'waiting' ? 'bg-yellow-500' :
                 gameState === 'playing' ? 'bg-green-500' : 'bg-gray-500'
               }`}></div>
-              <span className="font-medium text-white text-xs sm:text-sm">
+              <span className="text-xs font-medium text-white sm:text-sm">
                 {gameState === 'loading' ? 'Loading' :
                  gameState === 'waiting' ? 'Waiting' :
                  gameState === 'playing' ? 'Playing' : 'Finished'}
@@ -838,26 +852,42 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
             </div>
           </div>
 
-          <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-xl shadow-2xl p-3 sm:p-4">
+          <div className="p-3 border shadow-2xl bg-white/10 backdrop-blur-md border-white/20 rounded-xl sm:p-4">
             <div className="flex items-center gap-2 sm:gap-3">
-              <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-gray-300 flex-shrink-0" />
-              <span className="text-white text-xs sm:text-sm">Numbers: {calledNumbers.length}/50</span>
+              <Clock className="flex-shrink-0 w-4 h-4 text-gray-300 sm:w-5 sm:h-5" />
+              <span className="text-xs text-white sm:text-sm">Numbers: {calledNumbers.length}/50</span>
             </div>
           </div>
 
-          <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-xl shadow-2xl p-3 sm:p-4">
+          <div className="p-3 border shadow-2xl bg-white/10 backdrop-blur-md border-white/20 rounded-xl sm:p-4">
             <div className="flex items-center gap-2 sm:gap-3">
-              <Users className="w-4 h-4 sm:w-5 sm:h-5 text-green-400 flex-shrink-0" />
-              <span className="text-white text-xs sm:text-sm">Players: {gameInfo.totalPlayers}</span>
+              <Users className="flex-shrink-0 w-4 h-4 text-green-400 sm:w-5 sm:h-5" />
+              <span className="text-xs text-white sm:text-sm">Players: {gameInfo.totalPlayers}</span>
             </div>
           </div>
 
-          <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-xl shadow-2xl p-3 sm:p-4">
+          <div className="p-3 border shadow-2xl bg-white/10 backdrop-blur-md border-white/20 rounded-xl sm:p-4">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <Trophy className="flex-shrink-0 w-4 h-4 text-yellow-400 sm:w-5 sm:h-5" />
+              <span className="text-xs text-white sm:text-sm">Score: {playerScore}</span>
+            </div>
+          </div>
+
+          <div className="p-3 border shadow-2xl bg-white/10 backdrop-blur-md border-white/20 rounded-xl sm:p-4">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="flex items-center justify-center flex-shrink-0 w-4 h-4 text-xs font-bold text-blue-400 border border-blue-400 rounded sm:w-5 sm:h-5">#</div>
+              <span className="text-xs text-white sm:text-sm">
+                Rank: {playerPosition ? `#${playerPosition}` : '-'}
+              </span>
+            </div>
+          </div>
+
+          <div className="p-3 border shadow-2xl bg-white/10 backdrop-blur-md border-white/20 rounded-xl sm:p-4">
             <div className="flex items-center gap-2 sm:gap-3">
               <div className={`w-2 h-2 sm:w-3 sm:h-3 rounded-full ${
                 isRealTimeConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'
               }`}></div>
-              <span className="font-medium text-white text-xs sm:text-sm">
+              <span className="text-xs font-medium text-white sm:text-sm">
                 {isRealTimeConnected ? 'Live' : 'Offline'}
               </span>
             </div>
@@ -865,24 +895,24 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
         </div>
 
         {gameState === 'loading' && (
-          <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-xl shadow-2xl p-4 sm:p-6 lg:p-8 mb-4 sm:mb-6 text-center">
-            <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 border-4 rounded-full border-gray-600/30 border-t-gray-400 animate-spin"></div>
-            <h2 className="mb-2 text-lg sm:text-xl font-semibold text-white">Loading Game...</h2>
-            <p className="text-gray-400 text-sm sm:text-base">Checking game status...</p>
+          <div className="p-4 mb-4 text-center border shadow-2xl bg-white/10 backdrop-blur-md border-white/20 rounded-xl sm:p-6 lg:p-8 sm:mb-6">
+            <div className="w-12 h-12 mx-auto mb-3 border-4 rounded-full sm:w-16 sm:h-16 sm:mb-4 border-gray-600/30 border-t-gray-400 animate-spin"></div>
+            <h2 className="mb-2 text-lg font-semibold text-white sm:text-xl">Loading Game...</h2>
+            <p className="text-sm text-gray-400 sm:text-base">Checking game status...</p>
           </div>
         )}
 
         {gameState === 'waiting' && (
-          <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-xl shadow-2xl p-4 sm:p-6 lg:p-8 mb-4 sm:mb-6 text-center">
-            <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 border-4 rounded-full border-gray-600/30 border-t-gray-400 animate-spin"></div>
-            <h2 className="mb-2 text-lg sm:text-xl font-semibold text-white">Waiting for Game to Start</h2>
-            <p className="text-gray-400 text-sm sm:text-base">The host will begin the game shortly...</p>
+          <div className="p-4 mb-4 text-center border shadow-2xl bg-white/10 backdrop-blur-md border-white/20 rounded-xl sm:p-6 lg:p-8 sm:mb-6">
+            <div className="w-12 h-12 mx-auto mb-3 border-4 rounded-full sm:w-16 sm:h-16 sm:mb-4 border-gray-600/30 border-t-gray-400 animate-spin"></div>
+            <h2 className="mb-2 text-lg font-semibold text-white sm:text-xl">Waiting for Game to Start</h2>
+            <p className="text-sm text-gray-400 sm:text-base">The host will begin the game shortly...</p>
             {gameInfo.totalPlayers > 0 && (
-              <p className="mt-2 text-gray-300 text-sm sm:text-base">{gameInfo.totalPlayers} players joined</p>
+              <p className="mt-2 text-sm text-gray-300 sm:text-base">{gameInfo.totalPlayers} players joined</p>
             )}
             <button
               onClick={() => setShowRulesPopup(true)}
-              className="px-3 sm:px-4 py-2 mt-3 sm:mt-4 text-sm sm:text-base text-white transition-all duration-300 bg-gradient-to-r from-gray-700 to-black hover:from-gray-600 hover:to-gray-800 rounded-lg shadow-lg hover:shadow-xl transform hover:scale-105"
+              className="px-3 py-2 mt-3 text-sm text-white transition-all duration-300 transform rounded-lg shadow-lg sm:px-4 sm:mt-4 sm:text-base bg-gradient-to-r from-gray-700 to-black hover:from-gray-600 hover:to-gray-800 hover:shadow-xl hover:scale-105"
             >
               Game Rules & Winning Types
             </button>
@@ -894,7 +924,7 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
           <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/90 backdrop-blur-sm">
             <div className="w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto p-3 sm:p-6 lg:p-8 border shadow-2xl bg-slate-900 border-slate-700 rounded-xl">
               <div className="flex items-center justify-between mb-4 sm:mb-6">
-                <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-white">Game Rules & Winning Types</h2>
+                <h2 className="text-lg font-bold text-white sm:text-xl lg:text-2xl">Game Rules & Winning Types</h2>
                 <button
                   onClick={() => setShowRulesPopup(false)}
                   className="p-1.5 sm:p-2 text-gray-400 transition-colors hover:text-white"
@@ -907,9 +937,9 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
               
               <div className="space-y-4 sm:space-y-6">
                 {/* How to Play */}
-                <div className="p-3 sm:p-4 lg:p-6 border rounded-lg bg-slate-800 border-slate-600">
-                  <h3 className="mb-3 sm:mb-4 text-lg sm:text-xl font-semibold text-gray-300">How to Play</h3>
-                  <div className="space-y-2 sm:space-y-3 text-gray-300 text-sm sm:text-base">
+                <div className="p-3 border rounded-lg sm:p-4 lg:p-6 bg-slate-800 border-slate-600">
+                  <h3 className="mb-3 text-lg font-semibold text-gray-300 sm:mb-4 sm:text-xl">How to Play</h3>
+                  <div className="space-y-2 text-sm text-gray-300 sm:space-y-3 sm:text-base">
                     <p>1. You will receive a digital Tambola ticket with 50 numbers (1-50)</p>
                     <p>2. When a number is called, a question will appear on your screen</p>
                     <p>3. Answer the question correctly to mark that number on your ticket</p>
@@ -1039,9 +1069,9 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
             )}
 
             {/* Winning Conditions Progress */}
-            <div className="mb-6 p-4 bg-gray-800 border border-gray-600 rounded-xl">
-              <h3 className="mb-4 font-semibold text-white font-mono">Winning Conditions Progress</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="p-4 mb-6 bg-gray-800 border border-gray-600 rounded-xl">
+              <h3 className="mb-4 font-mono font-semibold text-white">Winning Conditions Progress</h3>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {(() => {
                   const progress = calculateWinningProgress()
                   return (
@@ -1055,7 +1085,7 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
                             {progress.earlyAdopter.blocked ? 'BLOCKED' : `${progress.earlyAdopter.current}/${progress.earlyAdopter.total} numbers`}
                           </span>
                         </div>
-                        <div className="w-full bg-gray-600 rounded-full h-2">
+                        <div className="w-full h-2 bg-gray-600 rounded-full">
                           <div 
                             className={`h-2 rounded-full transition-all duration-300 ${
                               progress.earlyAdopter.blocked ? 'bg-red-500' : 'bg-yellow-400'
@@ -1066,59 +1096,59 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
                           ></div>
                         </div>
                         {progress.earlyAdopter.blocked && (
-                          <div className="text-xs text-red-300 mt-1">
+                          <div className="mt-1 text-xs text-red-300">
                             Failed question 1-5. Cannot achieve Early Adopter.
                           </div>
                         )}
                       </div>
 
-                      <div className="p-3 bg-gray-700 rounded-lg border border-gray-600">
+                      <div className="p-3 bg-gray-700 border border-gray-600 rounded-lg">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-blue-400 font-semibold text-sm">⛽ Gas Saver</span>
+                          <span className="text-sm font-semibold text-blue-400">⛽ Gas Saver</span>
                           <span className="text-xs text-gray-400">First Row (1-10)</span>
                         </div>
-                        <div className="w-full bg-gray-600 rounded-full h-2">
+                        <div className="w-full h-2 bg-gray-600 rounded-full">
                           <div 
-                            className="bg-blue-400 h-2 rounded-full transition-all duration-300" 
+                            className="h-2 transition-all duration-300 bg-blue-400 rounded-full" 
                             style={{ width: `${(progress.gasSaver.current / progress.gasSaver.total) * 100}%` }}
                           ></div>
                         </div>
                       </div>
 
-                      <div className="p-3 bg-gray-700 rounded-lg border border-gray-600">
+                      <div className="p-3 bg-gray-700 border border-gray-600 rounded-lg">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-purple-400 font-semibold text-sm">📐 Corner Nodes</span>
+                          <span className="text-sm font-semibold text-purple-400">📐 Corner Nodes</span>
                           <span className="text-xs text-gray-400">4 Corners (1,10,41,50)</span>
                         </div>
-                        <div className="w-full bg-gray-600 rounded-full h-2">
+                        <div className="w-full h-2 bg-gray-600 rounded-full">
                           <div 
-                            className="bg-purple-400 h-2 rounded-full transition-all duration-300" 
+                            className="h-2 transition-all duration-300 bg-purple-400 rounded-full" 
                             style={{ width: `${(progress.cornerNodes.current / progress.cornerNodes.total) * 100}%` }}
                           ></div>
                         </div>
                       </div>
 
-                      <div className="p-3 bg-gray-700 rounded-lg border border-gray-600">
+                      <div className="p-3 bg-gray-700 border border-gray-600 rounded-lg">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-orange-400 font-semibold text-sm">⛏️ Miner of the Day</span>
+                          <span className="text-sm font-semibold text-orange-400">⛏️ Miner of the Day</span>
                           <span className="text-xs text-gray-400">{progress.minerOfTheDay.current}/{progress.minerOfTheDay.total} rows</span>
                         </div>
-                        <div className="w-full bg-gray-600 rounded-full h-2">
+                        <div className="w-full h-2 bg-gray-600 rounded-full">
                           <div 
-                            className="bg-orange-400 h-2 rounded-full transition-all duration-300" 
+                            className="h-2 transition-all duration-300 bg-orange-400 rounded-full" 
                             style={{ width: `${(progress.minerOfTheDay.current / progress.minerOfTheDay.total) * 100}%` }}
                           ></div>
                         </div>
                       </div>
 
-                      <div className="p-3 bg-gray-700 rounded-lg border border-gray-600 sm:col-span-2 lg:col-span-1">
+                      <div className="p-3 bg-gray-700 border border-gray-600 rounded-lg sm:col-span-2 lg:col-span-1">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-green-400 font-semibold text-sm">🏆 Full Blockchain</span>
+                          <span className="text-sm font-semibold text-green-400">🏆 Full Blockchain</span>
                           <span className="text-xs text-gray-400">{progress.fullBlockchain.current}/{progress.fullBlockchain.total} numbers</span>
                         </div>
-                        <div className="w-full bg-gray-600 rounded-full h-2">
+                        <div className="w-full h-2 bg-gray-600 rounded-full">
                           <div 
-                            className="bg-green-400 h-2 rounded-full transition-all duration-300" 
+                            className="h-2 transition-all duration-300 bg-green-400 rounded-full" 
                             style={{ width: `${(progress.fullBlockchain.current / progress.fullBlockchain.total) * 100}%` }}
                           ></div>
                         </div>
