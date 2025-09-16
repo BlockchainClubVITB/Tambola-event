@@ -16,7 +16,7 @@ import PlayerTicket from '../components/PlayerTicket'
 import CompleteBoard from '../components/CompleteBoard'
 import PlayerQuestionRound from '../components/PlayerQuestionRound'
 import { gameService } from '../utils/gameService'
-import { checkAllWinningConditions, getWinConditionInfo } from '../utils/winningConditions'
+import { checkAllWinningConditions, getWinConditionInfo, getBlockedConditions } from '../utils/winningConditions'
 import questionsData from '../data/questions.json'
 
 const PlayerGame = ({ gameId, playerName, isJoined }) => {
@@ -99,6 +99,20 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
       setIsQuestionActive(false)
     }
   }, [navigate])
+
+  // Debug useEffect to monitor incorrectlyAnsweredNumbers changes
+  useEffect(() => {
+    console.log('🔍 incorrectlyAnsweredNumbers changed:', Array.from(incorrectlyAnsweredNumbers))
+    // Force UI update by calculating blocked conditions
+    const blockedConditions = getBlockedConditions(incorrectlyAnsweredNumbers)
+    console.log('🚫 Current blocked conditions:', blockedConditions)
+    
+    // Force a re-render by updating a dummy state if needed
+    // This is a temporary solution to ensure UI updates
+    if (incorrectlyAnsweredNumbers.size > 0) {
+      console.log('🔄 Forcing UI update due to incorrect answers')
+    }
+  }, [incorrectlyAnsweredNumbers])
 
   const startGamePolling = () => {
     // Single initial fetch only - no continuous polling
@@ -544,8 +558,12 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
       toast.error('❌ Wrong answer!', { duration: 2000 })
       console.log('❌ Wrong answer, not sending to database')
       
-      // Track incorrect answer for Early Adopter condition
-      setIncorrectlyAnsweredNumbers(prev => new Set([...prev, questionData.id]))
+      // Track incorrect answer for blocking conditions
+      setIncorrectlyAnsweredNumbers(prev => {
+        const newSet = new Set([...prev, questionData.id])
+        console.log('🔍 Updated incorrectlyAnsweredNumbers:', Array.from(newSet))
+        return newSet
+      })
     }
     
     // No need for submission confirmation toast - too many toasts
@@ -555,15 +573,30 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
   const checkWinningConditions = async (correctNumbers) => {
     try {
       // LOCAL CHECK FIRST - avoid redundant database calls
-      const newWins = checkAllWinningConditions(correctNumbers, playerWins)
+      // Pass incorrectlyAnsweredNumbers to support blocking logic
+      const newWins = checkAllWinningConditions(correctNumbers, playerWins, incorrectlyAnsweredNumbers)
       
       if (Object.keys(newWins).length > 0) {
         console.log('🏆 Potential winning conditions achieved:', newWins)
         
+        // Check if any conditions are blocked
+        const blockedConditions = getBlockedConditions(incorrectlyAnsweredNumbers)
+        
+        // Filter out any wins that are blocked
+        const validWins = {}
+        Object.keys(newWins).forEach(condition => {
+          if (!blockedConditions[condition]?.blocked) {
+            validWins[condition] = newWins[condition]
+          }
+        })
+        
+        console.log('🚫 Blocked conditions:', blockedConditions)
+        console.log('✅ Valid wins after blocking check:', validWins)
+        
         // DON'T update local state immediately - wait for server confirmation
         // This ensures only actual wins (not denied ones) are shown
         
-        return newWins // Return for server validation
+        return validWins // Return for server validation
       }
       
       return {} // No new wins
@@ -656,16 +689,43 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
     const correctNumbers = Array.from(correctlyAnsweredNumbers)
     const incorrectNumbers = Array.from(incorrectlyAnsweredNumbers)
     
+    // Debug logging
+    console.log('🔍 calculateWinningProgress called:', {
+      correctCount: correctNumbers.length,
+      incorrectCount: incorrectNumbers.length,
+      incorrectNumbers: incorrectNumbers
+    })
+    
+    // Get blocked conditions
+    const blockedConditions = getBlockedConditions(incorrectlyAnsweredNumbers)
+    console.log('🚫 Blocked conditions:', blockedConditions)
+    
+    // Test blocking scenarios for debugging
+    if (incorrectNumbers.length > 0) {
+      console.log('🧪 Testing blocking scenarios:')
+      if (incorrectNumbers.some(num => num >= 1 && num <= 5)) {
+        console.log('  ❌ Early Adopter should be blocked (incorrect in 1-5)')
+      }
+      if (incorrectNumbers.filter(num => num >= 1 && num <= 10).length >= 4) {
+        console.log('  ❌ Gas Saver should be blocked (4+ incorrect in 1-10)')
+      }
+      if (incorrectNumbers.some(num => [1, 10, 41, 50].includes(num))) {
+        console.log('  ❌ Corner Nodes should be blocked (corner incorrect)')
+      }
+      if (incorrectNumbers.length >= 10) {
+        console.log('  ❌ Full Blockchain should be blocked (10+ incorrect)')
+      }
+    }
+    
     // Early Adopter - first 5 questions must ALL be correct (1-5), if any wrong from 1-5, permanently blocked
     const firstFiveQuestions = [1, 2, 3, 4, 5]
     const hasIncorrectInFirstFive = firstFiveQuestions.some(num => incorrectNumbers.includes(num))
     
     let earlyAdopterProgress = 0
-    let earlyAdopterBlocked = false
+    let earlyAdopterBlocked = blockedConditions.earlyAdopter?.blocked || false
     
-    if (hasIncorrectInFirstFive) {
+    if (earlyAdopterBlocked) {
       // Permanently blocked - any wrong answer in first 5 questions
-      earlyAdopterBlocked = true
       earlyAdopterProgress = 0
     } else {
       // Count correct answers from first 5 questions only
@@ -700,12 +760,37 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
         current: earlyAdopterProgress, 
         total: 5, 
         blocked: earlyAdopterBlocked,
-        status: earlyAdopterBlocked ? 'blocked' : (earlyAdopterProgress === 5 ? 'completed' : 'active')
+        status: earlyAdopterBlocked ? 'blocked' : (earlyAdopterProgress === 5 ? 'completed' : 'active'),
+        reason: blockedConditions.earlyAdopter?.reason || null
       },
-      gasSaver: { current: gasSaverProgress, total: 10 },
-      cornerNodes: { current: cornerProgress, total: 4 },
-      minerOfTheDay: { current: completedRows, total: 2 },
-      fullBlockchain: { current: fullBlockchainProgress, total: 50 }
+      gasSaver: { 
+        current: gasSaverProgress, 
+        total: 10,
+        blocked: blockedConditions.gasSaver?.blocked || false,
+        status: blockedConditions.gasSaver?.blocked ? 'blocked' : (gasSaverProgress === 10 ? 'completed' : 'active'),
+        reason: blockedConditions.gasSaver?.reason || null
+      },
+      cornerNodes: { 
+        current: cornerProgress, 
+        total: 4,
+        blocked: blockedConditions.cornerNodes?.blocked || false,
+        status: blockedConditions.cornerNodes?.blocked ? 'blocked' : (cornerProgress === 4 ? 'completed' : 'active'),
+        reason: blockedConditions.cornerNodes?.reason || null
+      },
+      minerOfTheDay: { 
+        current: completedRows, 
+        total: 2,
+        blocked: blockedConditions.minerOfTheDay?.blocked || false,
+        status: blockedConditions.minerOfTheDay?.blocked ? 'blocked' : (completedRows === 2 ? 'completed' : 'active'),
+        reason: blockedConditions.minerOfTheDay?.reason || null
+      },
+      fullBlockchain: { 
+        current: fullBlockchainProgress, 
+        total: 50,
+        blocked: blockedConditions.fullBlockchain?.blocked || false,
+        status: blockedConditions.fullBlockchain?.blocked ? 'blocked' : (fullBlockchainProgress === 50 ? 'completed' : 'active'),
+        reason: blockedConditions.fullBlockchain?.reason || null
+      }
     }
   }
 
@@ -1097,61 +1182,113 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
                         </div>
                         {progress.earlyAdopter.blocked && (
                           <div className="mt-1 text-xs text-red-300">
-                            Failed question 1-5. Cannot achieve Early Adopter.
+                            {progress.earlyAdopter.reason || "Failed question 1-5. Cannot achieve Early Adopter."}
                           </div>
                         )}
                       </div>
 
-                      <div className="p-3 bg-gray-700 border border-gray-600 rounded-lg">
+                      <div className={`p-3 bg-gray-700 rounded-lg border ${progress.gasSaver.blocked ? 'border-red-500 bg-red-900/20' : 'border-gray-600'}`}>
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-semibold text-blue-400">⛽ Gas Saver</span>
-                          <span className="text-xs text-gray-400">First Row (1-10)</span>
+                          <span className={`text-sm font-semibold ${progress.gasSaver.blocked ? 'text-red-400' : 'text-blue-400'}`}>
+                            {progress.gasSaver.blocked ? '❌' : '⛽'} Gas Saver
+                          </span>
+                          <span className="text-xs text-gray-400">
+                            {progress.gasSaver.blocked ? 'BLOCKED' : 'First Row (1-10)'}
+                          </span>
                         </div>
                         <div className="w-full h-2 bg-gray-600 rounded-full">
                           <div 
-                            className="h-2 transition-all duration-300 bg-blue-400 rounded-full" 
-                            style={{ width: `${(progress.gasSaver.current / progress.gasSaver.total) * 100}%` }}
+                            className={`h-2 transition-all duration-300 rounded-full ${
+                              progress.gasSaver.blocked ? 'bg-red-500' : 'bg-blue-400'
+                            }`}
+                            style={{ 
+                              width: progress.gasSaver.blocked ? '100%' : `${(progress.gasSaver.current / progress.gasSaver.total) * 100}%` 
+                            }}
                           ></div>
                         </div>
+                        {progress.gasSaver.blocked && progress.gasSaver.reason && (
+                          <div className="mt-1 text-xs text-red-300">
+                            {progress.gasSaver.reason}
+                          </div>
+                        )}
                       </div>
 
-                      <div className="p-3 bg-gray-700 border border-gray-600 rounded-lg">
+                      <div className={`p-3 bg-gray-700 rounded-lg border ${progress.cornerNodes.blocked ? 'border-red-500 bg-red-900/20' : 'border-gray-600'}`}>
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-semibold text-purple-400">📐 Corner Nodes</span>
-                          <span className="text-xs text-gray-400">4 Corners (1,10,41,50)</span>
+                          <span className={`text-sm font-semibold ${progress.cornerNodes.blocked ? 'text-red-400' : 'text-purple-400'}`}>
+                            {progress.cornerNodes.blocked ? '❌' : '📐'} Corner Nodes
+                          </span>
+                          <span className="text-xs text-gray-400">
+                            {progress.cornerNodes.blocked ? 'BLOCKED' : '4 Corners (1,10,41,50)'}
+                          </span>
                         </div>
                         <div className="w-full h-2 bg-gray-600 rounded-full">
                           <div 
-                            className="h-2 transition-all duration-300 bg-purple-400 rounded-full" 
-                            style={{ width: `${(progress.cornerNodes.current / progress.cornerNodes.total) * 100}%` }}
+                            className={`h-2 transition-all duration-300 rounded-full ${
+                              progress.cornerNodes.blocked ? 'bg-red-500' : 'bg-purple-400'
+                            }`}
+                            style={{ 
+                              width: progress.cornerNodes.blocked ? '100%' : `${(progress.cornerNodes.current / progress.cornerNodes.total) * 100}%` 
+                            }}
                           ></div>
                         </div>
+                        {progress.cornerNodes.blocked && progress.cornerNodes.reason && (
+                          <div className="mt-1 text-xs text-red-300">
+                            {progress.cornerNodes.reason}
+                          </div>
+                        )}
                       </div>
 
-                      <div className="p-3 bg-gray-700 border border-gray-600 rounded-lg">
+                      <div className={`p-3 bg-gray-700 rounded-lg border ${progress.minerOfTheDay.blocked ? 'border-red-500 bg-red-900/20' : 'border-gray-600'}`}>
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-semibold text-orange-400">⛏️ Miner of the Day</span>
-                          <span className="text-xs text-gray-400">{progress.minerOfTheDay.current}/{progress.minerOfTheDay.total} rows</span>
+                          <span className={`text-sm font-semibold ${progress.minerOfTheDay.blocked ? 'text-red-400' : 'text-orange-400'}`}>
+                            {progress.minerOfTheDay.blocked ? '❌' : '⛏️'} Miner of the Day
+                          </span>
+                          <span className="text-xs text-gray-400">
+                            {progress.minerOfTheDay.blocked ? 'BLOCKED' : `${progress.minerOfTheDay.current}/${progress.minerOfTheDay.total} rows`}
+                          </span>
                         </div>
                         <div className="w-full h-2 bg-gray-600 rounded-full">
                           <div 
-                            className="h-2 transition-all duration-300 bg-orange-400 rounded-full" 
-                            style={{ width: `${(progress.minerOfTheDay.current / progress.minerOfTheDay.total) * 100}%` }}
+                            className={`h-2 transition-all duration-300 rounded-full ${
+                              progress.minerOfTheDay.blocked ? 'bg-red-500' : 'bg-orange-400'
+                            }`}
+                            style={{ 
+                              width: progress.minerOfTheDay.blocked ? '100%' : `${(progress.minerOfTheDay.current / progress.minerOfTheDay.total) * 100}%` 
+                            }}
                           ></div>
                         </div>
+                        {progress.minerOfTheDay.blocked && progress.minerOfTheDay.reason && (
+                          <div className="mt-1 text-xs text-red-300">
+                            {progress.minerOfTheDay.reason}
+                          </div>
+                        )}
                       </div>
 
-                      <div className="p-3 bg-gray-700 border border-gray-600 rounded-lg sm:col-span-2 lg:col-span-1">
+                      <div className={`p-3 bg-gray-700 rounded-lg border sm:col-span-2 lg:col-span-1 ${progress.fullBlockchain.blocked ? 'border-red-500 bg-red-900/20' : 'border-gray-600'}`}>
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-semibold text-green-400">🏆 Full Blockchain</span>
-                          <span className="text-xs text-gray-400">{progress.fullBlockchain.current}/{progress.fullBlockchain.total} numbers</span>
+                          <span className={`text-sm font-semibold ${progress.fullBlockchain.blocked ? 'text-red-400' : 'text-green-400'}`}>
+                            {progress.fullBlockchain.blocked ? '❌' : '🏆'} Full Blockchain
+                          </span>
+                          <span className="text-xs text-gray-400">
+                            {progress.fullBlockchain.blocked ? 'BLOCKED' : `${progress.fullBlockchain.current}/${progress.fullBlockchain.total} numbers`}
+                          </span>
                         </div>
                         <div className="w-full h-2 bg-gray-600 rounded-full">
                           <div 
-                            className="h-2 transition-all duration-300 bg-green-400 rounded-full" 
-                            style={{ width: `${(progress.fullBlockchain.current / progress.fullBlockchain.total) * 100}%` }}
+                            className={`h-2 transition-all duration-300 rounded-full ${
+                              progress.fullBlockchain.blocked ? 'bg-red-500' : 'bg-green-400'
+                            }`}
+                            style={{ 
+                              width: progress.fullBlockchain.blocked ? '100%' : `${(progress.fullBlockchain.current / progress.fullBlockchain.total) * 100}%` 
+                            }}
                           ></div>
                         </div>
+                        {progress.fullBlockchain.blocked && progress.fullBlockchain.reason && (
+                          <div className="mt-1 text-xs text-red-300">
+                            {progress.fullBlockchain.reason}
+                          </div>
+                        )}
                       </div>
                     </>
                   )

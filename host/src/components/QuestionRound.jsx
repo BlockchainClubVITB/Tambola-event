@@ -193,17 +193,17 @@ const QuestionRound = ({
   if (!isVisible || !currentQuestion) return null
 
   return (
-    <div className="fixed inset-0 bg-gradient-to-br from-black/95 via-gray-900/95 to-slate-900/95 backdrop-blur-xl flex items-center justify-center z-50 p-2 sm:p-4 overflow-hidden">
+  <div className="fixed inset-0 z-50 flex items-center justify-center p-1 overflow-hidden bg-gradient-to-br from-black/95 via-gray-900/95 to-slate-900/95 backdrop-blur-xl sm:p-2">
       {/* Enhanced background decorative elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-gray-500/20 to-slate-500/15 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-br from-slate-600/20 to-gray-600/15 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }}></div>
-        <div className="absolute top-1/3 left-1/4 w-60 h-60 bg-gradient-to-br from-gray-700/15 to-slate-700/10 rounded-full blur-2xl animate-pulse" style={{ animationDelay: '2s' }}></div>
-        <div className="absolute bottom-1/3 right-1/4 w-60 h-60 bg-gradient-to-br from-slate-500/20 to-gray-500/10 rounded-full blur-2xl animate-pulse" style={{ animationDelay: '3s' }}></div>
+        <div className="absolute rounded-full -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-gray-500/20 to-slate-500/15 blur-3xl animate-pulse"></div>
+        <div className="absolute rounded-full -bottom-40 -left-40 w-80 h-80 bg-gradient-to-br from-slate-600/20 to-gray-600/15 blur-3xl animate-pulse" style={{ animationDelay: '1s' }}></div>
+        <div className="absolute rounded-full top-1/3 left-1/4 w-60 h-60 bg-gradient-to-br from-gray-700/15 to-slate-700/10 blur-2xl animate-pulse" style={{ animationDelay: '2s' }}></div>
+        <div className="absolute rounded-full bottom-1/3 right-1/4 w-60 h-60 bg-gradient-to-br from-slate-500/20 to-gray-500/10 blur-2xl animate-pulse" style={{ animationDelay: '3s' }}></div>
       </div>
       
       {/* Main card with enhanced glass effect */}
-      <div className="bg-black/40 backdrop-blur-2xl rounded-3xl p-3 sm:p-5 lg:p-8 max-w-xs sm:max-w-md lg:max-w-2xl w-full border border-gray-700/50 shadow-2xl shadow-black/60 overflow-hidden relative">
+      <div className="relative w-full max-w-md p-2 overflow-hidden border shadow-2xl bg-black/40 backdrop-blur-2xl rounded-2xl sm:p-3 lg:p-3 border-gray-700/50 shadow-black/60">
         
         {/* Glass effect overlays */}
         <div className="absolute inset-0 bg-gradient-to-br from-gray-800/20 via-gray-900/10 to-transparent rounded-3xl"></div>
@@ -216,20 +216,20 @@ const QuestionRound = ({
         {/* Content wrapper */}
         <div className="relative z-10">
           {/* Header with number and timer */}
-          <div className="text-center mb-4 sm:mb-6 lg:mb-8">
-            <div className="text-3xl sm:text-5xl lg:text-8xl font-bold mb-2 sm:mb-4 animate-pulse">
-              <span className="bg-gradient-to-r from-blue-400 via-indigo-500 to-purple-600 bg-clip-text text-transparent drop-shadow-lg">
+          <div className="mb-1 text-center sm:mb-2">
+            <div className="mb-1 text-xl font-bold sm:text-2xl lg:text-3xl animate-pulse">
+              <span className="text-transparent bg-gradient-to-r from-blue-400 via-indigo-500 to-purple-600 bg-clip-text drop-shadow-lg">
                 {selectedNumber}
               </span>
             </div>
             
             {/* Timer circle on mobile, regular display on desktop */}
-            <div className="flex flex-col items-center gap-2">
-              <div className={`relative inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 lg:w-24 lg:h-24 rounded-full border-4 ${
+            <div className="flex flex-col items-center gap-1">
+              <div className={`relative inline-flex items-center justify-center w-12 h-12 sm:w-14 sm:h-14 lg:w-16 lg:h-16 rounded-full border-2 ${
                 currentPhase === 'prep' ? 'border-yellow-400/30 bg-yellow-400/10' :
                 currentPhase === 'question' ? 'border-green-400/30 bg-green-400/10' : 'border-blue-400/30 bg-blue-400/10'
               }`}>
-                <span className={`text-xl sm:text-2xl lg:text-3xl font-bold font-mono ${
+                <span className={`text-lg sm:text-xl lg:text-2xl font-bold font-mono ${
                   currentPhase === 'prep' ? 'text-yellow-400' :
                   currentPhase === 'question' ? 'text-green-400' : 'text-blue-400'
                 }`}>
@@ -243,7 +243,7 @@ const QuestionRound = ({
                     cy="50"
                     r="45"
                     fill="none"
-                    strokeWidth="8"
+                    strokeWidth="6"
                     className={
                       currentPhase === 'prep' ? 'stroke-yellow-400/20' :
                       currentPhase === 'question' ? 'stroke-green-400/20' : 'stroke-blue-400/20'
@@ -254,7 +254,7 @@ const QuestionRound = ({
                     cy="50"
                     r="45"
                     fill="none"
-                    strokeWidth="8"
+                    strokeWidth="6"
                     strokeLinecap="round"
                     className={
                       currentPhase === 'prep' ? 'stroke-yellow-400' :
@@ -280,20 +280,20 @@ const QuestionRound = ({
 
           {/* Preparation Phase */}
           {currentPhase === 'prep' && (
-            <div className="text-center py-4 sm:py-6 lg:py-8">
-              <div className="mb-3 sm:mb-4 lg:mb-6 relative">
-                <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-yellow-400 animate-pulse">
+            <div className="py-2 text-center sm:py-3">
+              <div className="relative mb-2 sm:mb-3">
+                <div className="text-lg font-bold text-yellow-400 sm:text-xl lg:text-2xl animate-pulse">
                   Get Ready!
                 </div>
-                <div className="absolute -inset-1 bg-yellow-400/20 blur-xl rounded-full"></div>
+                <div className="absolute rounded-full -inset-1 bg-yellow-400/20 blur-xl"></div>
               </div>
               
-              <div className="space-y-2 sm:space-y-3">
-                <p className="text-sm sm:text-base lg:text-lg text-slate-300 font-medium">
+              <div className="space-y-1 sm:space-y-2">
+                <p className="text-xs font-medium sm:text-sm lg:text-base text-slate-300">
                   Question {selectedNumber} is about to begin...
                 </p>
-                <div className="mx-auto max-w-xs sm:max-w-sm lg:max-w-md">
-                  <div className="relative text-xs sm:text-sm lg:text-base text-gray-200 bg-gradient-to-br from-gray-800/60 to-black/40 backdrop-blur-xl rounded-xl p-3 sm:p-4 border border-gray-600/40 shadow-lg">
+                <div className="max-w-xs mx-auto sm:max-w-sm">
+                  <div className="relative p-2 text-xs text-gray-200 border shadow-lg sm:text-sm bg-gradient-to-br from-gray-800/60 to-black/40 backdrop-blur-xl rounded-xl sm:p-3 border-gray-600/40">
                     {/* Glass effect overlay */}
                     <div className="absolute inset-0 bg-gradient-to-br from-gray-700/20 to-transparent rounded-xl"></div>
                     <div className="relative z-10 font-medium leading-relaxed">
@@ -307,25 +307,25 @@ const QuestionRound = ({
 
           {/* Question Phase */}
           {currentPhase === 'question' && (
-            <div className="space-y-3 sm:space-y-4 lg:space-y-6">
+            <div className="space-y-2 sm:space-y-3">
               <div className="text-center">
-                <h2 className="text-base sm:text-lg lg:text-xl font-bold text-white mb-2 sm:mb-3">
+                <h2 className="mb-1 text-sm font-bold text-white sm:text-base lg:text-lg sm:mb-2">
                   Question {selectedNumber}
                 </h2>
-                <div className="mx-auto max-w-xs sm:max-w-sm lg:max-w-lg">
-                  <div className="relative bg-gradient-to-br from-gray-800/70 to-black/50 backdrop-blur-xl rounded-2xl p-4 sm:p-5 lg:p-6 border border-gray-600/50 shadow-xl shadow-black/40">
+                <div className="max-w-xs mx-auto sm:max-w-sm">
+                  <div className="relative p-2 border shadow-xl bg-gradient-to-br from-gray-800/70 to-black/50 backdrop-blur-xl rounded-2xl sm:p-3 border-gray-600/50 shadow-black/40">
                     {/* Enhanced glass effect overlays */}
                     <div className="absolute inset-0 bg-gradient-to-br from-gray-700/25 via-gray-800/15 to-transparent rounded-2xl"></div>
                     <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gray-400/60 to-transparent"></div>
                     
-                    <p className="relative z-10 text-sm sm:text-base lg:text-lg text-gray-100 font-medium leading-relaxed text-center">
+                    <p className="relative z-10 text-xs font-medium leading-relaxed text-center text-gray-100 sm:text-sm lg:text-base">
                       {currentQuestion.question}
                     </p>
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-2 sm:gap-3">
+              <div className="grid grid-cols-1 gap-1 sm:gap-2">
                 {currentQuestion.options.map((option, index) => (
                   <div 
                     key={index}
@@ -333,26 +333,26 @@ const QuestionRound = ({
                     style={{ animationDelay: `${index * 0.1}s` }}
                   >
                     {/* Animated background shimmer effect */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent transform -skew-x-12 -translate-x-full animate-shimmer"></div>
+                    <div className="absolute inset-0 transform -translate-x-full -skew-x-12 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer"></div>
                     
-                    <div className="flex items-center space-x-2 sm:space-x-3 relative z-10">
-                      <div className={`w-6 h-6 sm:w-8 sm:h-8 lg:w-9 lg:h-9 rounded-full flex items-center justify-center text-white font-bold text-xs sm:text-sm lg:text-base flex-shrink-0 shadow-lg relative overflow-hidden ${
+                    <div className="relative z-10 flex items-center space-x-2">
+                      <div className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center text-white font-bold text-xs sm:text-sm flex-shrink-0 shadow-lg relative overflow-hidden ${
                         index === 0 ? 'bg-gradient-to-br from-pink-400 to-rose-500' :
                         index === 1 ? 'bg-gradient-to-br from-blue-400 to-indigo-500' :
                         index === 2 ? 'bg-gradient-to-br from-orange-400 to-amber-500' :
                         'bg-gradient-to-br from-purple-400 to-violet-500'
                       }`}>
                         {/* Letter glow effect */}
-                        <div className="absolute inset-0 bg-white/20 rounded-full animate-pulse"></div>
+                        <div className="absolute inset-0 rounded-full bg-white/20 animate-pulse"></div>
                         <span className="relative z-10">{String.fromCharCode(65 + index)}</span>
                       </div>
-                      <span className="text-xs sm:text-sm lg:text-base text-white font-medium flex-1 leading-tight drop-shadow-sm">
+                      <span className="flex-1 text-xs font-medium leading-tight text-white sm:text-sm drop-shadow-sm">
                         {option}
                       </span>
                       {index === currentQuestion.correctAnswer && currentPhase === 'scoring' && (
                         <div className="flex items-center">
-                          <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-green-300 animate-bounce flex-shrink-0" />
-                          <span className="ml-1 text-xs sm:text-sm text-green-300 font-bold">Correct!</span>
+                          <CheckCircle className="flex-shrink-0 w-4 h-4 text-green-300 sm:w-5 sm:h-5 animate-bounce" />
+                          <span className="ml-1 text-xs font-bold text-green-300 sm:text-sm">Correct!</span>
                         </div>
                       )}
                     </div>
@@ -361,9 +361,9 @@ const QuestionRound = ({
               </div>
 
               <div className="text-center">
-                <div className="inline-flex items-center gap-2 px-3 py-2 bg-blue-900/20 border border-blue-700/30 rounded-full">
+                <div className="inline-flex items-center gap-2 px-3 py-2 border rounded-full bg-blue-900/20 border-blue-700/30">
                   <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-                  <span className="text-xs sm:text-sm text-blue-300 font-medium">
+                  <span className="text-xs font-medium text-blue-300 sm:text-sm">
                     Players are answering on their devices...
                   </span>
                 </div>
@@ -373,34 +373,34 @@ const QuestionRound = ({
 
           {/* Scoring Phase */}
           {currentPhase === 'scoring' && (
-            <div className="text-center py-4 sm:py-6 lg:py-8">
-              <div className="mb-4 sm:mb-6 relative">
+            <div className="py-2 text-center sm:py-3">
+              <div className="relative mb-2 sm:mb-3">
                 <div className="flex flex-col items-center">
                   <div className="relative">
-                    <CheckCircle className="w-12 h-12 sm:w-16 sm:h-16 lg:w-20 lg:h-20 text-green-500 animate-bounce" />
-                    <div className="absolute -inset-2 bg-green-400/20 blur-xl rounded-full"></div>
+                    <CheckCircle className="w-8 h-8 text-green-500 sm:w-10 sm:h-10 animate-bounce" />
+                    <div className="absolute rounded-full -inset-2 bg-green-400/20 blur-xl"></div>
                   </div>
-                  <div className="text-lg sm:text-xl lg:text-2xl font-bold text-green-400 mt-2 sm:mt-3">
+                  <div className="mt-1 text-base font-bold text-green-400 sm:text-lg sm:mt-2">
                     Round Complete!
                   </div>
                 </div>
               </div>
               
-              <div className="space-y-2 sm:space-y-3">
-                <div className="mx-auto max-w-xs sm:max-w-sm lg:max-w-md">
-                  <div className="bg-green-900/20 border border-green-700/30 rounded-lg p-2 sm:p-3">
-                    <p className="text-xs sm:text-sm lg:text-base text-green-200 font-medium">
+              <div className="space-y-1 sm:space-y-2">
+                <div className="max-w-xs mx-auto sm:max-w-sm">
+                  <div className="p-2 border rounded-lg bg-green-900/20 border-green-700/30 sm:p-3">
+                    <p className="text-xs font-medium text-green-200 sm:text-sm lg:text-base">
                       <span className="font-bold">Correct Answer:</span>
                     </p>
-                    <p className="text-sm sm:text-base lg:text-lg text-green-100 font-bold mt-1">
+                    <p className="mt-1 text-sm font-bold text-green-100 sm:text-base lg:text-lg">
                       {String.fromCharCode(65 + currentQuestion.correctAnswer)} - {currentQuestion.options[currentQuestion.correctAnswer]}
                     </p>
                   </div>
                 </div>
                 
-                <div className="inline-flex items-center gap-2 px-3 py-2 bg-blue-900/20 border border-blue-700/30 rounded-full">
+                <div className="inline-flex items-center gap-2 px-3 py-2 border rounded-full bg-blue-900/20 border-blue-700/30">
                   <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-                  <span className="text-xs sm:text-sm text-blue-300 font-medium">
+                  <span className="text-xs font-medium text-blue-300 sm:text-sm">
                     Calculating scores and updating leaderboard...
                   </span>
                 </div>
@@ -410,7 +410,7 @@ const QuestionRound = ({
 
           {/* Close button - only show during prep phase */}
           {currentPhase === 'prep' && (
-            <div className="text-center mt-4 sm:mt-6">
+            <div className="mt-4 text-center sm:mt-6">
               <button
                 onClick={handleClose}
                 className="px-4 py-2 sm:px-5 sm:py-2.5 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-xs sm:text-sm font-semibold rounded-full shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"

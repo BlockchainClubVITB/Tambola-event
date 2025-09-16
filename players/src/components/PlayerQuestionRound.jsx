@@ -31,7 +31,7 @@ const PlayerQuestionRound = ({
 
   // Prepare class name for answer option based on its state
   const getOptionClassName = (index) => {
-    const baseClass = "p-2 sm:p-3 lg:p-4 rounded-xl transition-all duration-300 touch-manipulation relative overflow-hidden cursor-pointer transform";
+    const baseClass = "p-1 sm:p-2 rounded-lg transition-all duration-300 touch-manipulation relative overflow-hidden cursor-pointer transform";
     
     // Animation for entrance
     const animationClass = animateOptions ? "animate-appear-staggered" : "";
@@ -93,7 +93,7 @@ const PlayerQuestionRound = ({
   if (!isVisible || !questionData) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-gradient-to-br from-black/95 via-gray-900/95 to-slate-900/95 backdrop-blur-xl overflow-hidden">
+  <div className="fixed inset-0 z-50 flex items-center justify-center p-1 sm:p-2 bg-gradient-to-br from-black/95 via-gray-900/95 to-slate-900/95 backdrop-blur-xl overflow-hidden">
       {/* Enhanced background decorative elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-gray-500/20 to-slate-500/15 rounded-full blur-3xl animate-pulse"></div>
@@ -103,10 +103,10 @@ const PlayerQuestionRound = ({
       </div>
       
       {/* Main card with enhanced glass effect */}
-      <div className="w-full max-w-xs sm:max-w-md lg:max-w-xl p-3 sm:p-5 lg:p-8 border shadow-2xl shadow-black/60 bg-black/40 backdrop-blur-2xl border-gray-700/50 rounded-3xl overflow-hidden relative">
+  <div className="w-full max-w-xs sm:max-w-sm lg:max-w-md p-2 sm:p-2 lg:p-3 border shadow-2xl shadow-black/60 bg-black/40 backdrop-blur-2xl border-gray-700/50 rounded-xl overflow-hidden relative">
         
         {/* Glass effect overlays */}
-        <div className="absolute inset-0 bg-gradient-to-br from-gray-800/20 via-gray-900/10 to-transparent rounded-3xl"></div>
+        <div className="absolute inset-0 bg-gradient-to-br from-gray-800/20 via-gray-900/10 to-transparent rounded-xl"></div>
         <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gray-500/50 to-transparent"></div>
         <div className="absolute top-0 bottom-0 left-0 w-px bg-gradient-to-b from-transparent via-gray-600/30 to-transparent"></div>
         
@@ -116,20 +116,20 @@ const PlayerQuestionRound = ({
         {/* Content wrapper */}
         <div className="relative z-10">
           {/* Header with number and timer */}
-          <div className="mb-4 sm:mb-6 lg:mb-8 text-center">
-            <div className="text-3xl sm:text-5xl lg:text-7xl font-bold mb-2 sm:mb-4 animate-pulse">
+          <div className="mb-1 text-center">
+            <div className="text-lg sm:text-xl lg:text-2xl font-bold mb-1 animate-pulse">
               <span className="bg-gradient-to-r from-blue-400 via-indigo-500 to-purple-600 bg-clip-text text-transparent drop-shadow-lg">
                 {questionData.id}
               </span>
             </div>
             
             {/* Enhanced timer with circular progress */}
-            <div className="flex flex-col items-center gap-2">
-              <div className={`relative inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 lg:w-24 lg:h-24 rounded-full border-4 ${
+            <div className="flex flex-col items-center gap-1">
+              <div className={`relative inline-flex items-center justify-center w-12 h-12 sm:w-14 sm:h-14 lg:w-16 lg:h-16 rounded-full border-3 ${
                 currentPhase === 'prep' ? 'border-yellow-400/30 bg-yellow-400/10' :
                 currentPhase === 'question' ? 'border-green-400/30 bg-green-400/10' : 'border-blue-400/30 bg-blue-400/10'
               }`}>
-                <span className={`text-xl sm:text-2xl lg:text-3xl font-bold font-mono ${
+                <span className={`text-base sm:text-lg lg:text-xl font-bold font-mono ${
                   currentPhase === 'prep' ? 'text-yellow-400' :
                   currentPhase === 'question' ? 'text-green-400' : 'text-blue-400'
                 }`}>
@@ -167,7 +167,7 @@ const PlayerQuestionRound = ({
                 </svg>
               </div>
               
-              <div className={`text-xs sm:text-sm lg:text-base font-medium ${
+              <div className={`text-xs font-medium ${
                 currentPhase === 'prep' ? 'text-yellow-300' :
                 currentPhase === 'question' ? 'text-green-300' : 'text-blue-300'
               }`}>
@@ -180,22 +180,22 @@ const PlayerQuestionRound = ({
 
           {/* Preparation Phase */}
           {currentPhase === 'prep' && (
-            <div className="py-4 sm:py-6 lg:py-8 text-center">
-              <div className="mb-3 sm:mb-4 lg:mb-6 relative">
-                <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-yellow-400 animate-pulse">
+            <div className="py-2 text-center">
+              <div className="mb-2 relative">
+                <div className="text-lg sm:text-xl font-bold text-yellow-400 animate-pulse">
                   Get Ready!
                 </div>
                 <div className="absolute -inset-1 bg-yellow-400/20 blur-xl rounded-full"></div>
               </div>
               
-              <div className="space-y-2 sm:space-y-3">
-                <p className="text-sm sm:text-base lg:text-lg text-slate-300 font-medium">
+              <div className="space-y-1">
+                <p className="text-sm text-slate-300 font-medium">
                   Question {questionData.id} is about to begin...
                 </p>
-                <div className="mx-auto max-w-xs sm:max-w-sm lg:max-w-md">
-                  <div className="relative text-xs sm:text-sm lg:text-base text-gray-200 bg-gradient-to-br from-gray-800/60 to-black/40 backdrop-blur-xl rounded-xl p-3 sm:p-4 border border-gray-600/40 shadow-lg">
+                <div className="mx-auto max-w-xs sm:max-w-sm">
+                  <div className="relative text-xs text-gray-200 bg-gradient-to-br from-gray-800/60 to-black/40 backdrop-blur-xl rounded-lg p-2 border border-gray-600/40 shadow-lg">
                     {/* Glass effect overlay */}
-                    <div className="absolute inset-0 bg-gradient-to-br from-gray-700/20 to-transparent rounded-xl"></div>
+                    <div className="absolute inset-0 bg-gradient-to-br from-gray-700/20 to-transparent rounded-lg"></div>
                     <div className="relative z-10 font-medium leading-relaxed">
                       {questionData.question}
                     </div>
@@ -207,25 +207,25 @@ const PlayerQuestionRound = ({
 
           {/* Question Phase Content */}
           {currentPhase === 'question' && (
-            <div className="space-y-3 sm:space-y-4 lg:space-y-5">
+            <div className="space-y-2">
               <div className="text-center">
-                <h2 className="mb-2 sm:mb-3 lg:mb-4 text-base sm:text-lg lg:text-xl font-bold text-white">
+                <h2 className="mb-1 text-sm sm:text-base font-bold text-white">
                   Question {questionData.id}
                 </h2>
-                <div className="mx-auto max-w-xs sm:max-w-sm lg:max-w-lg">
-                  <div className="relative mb-3 sm:mb-4 lg:mb-5 bg-gradient-to-br from-gray-800/70 to-black/50 backdrop-blur-xl rounded-2xl p-4 sm:p-5 lg:p-6 border border-gray-600/50 shadow-xl shadow-black/40">
+                <div className="mx-auto max-w-xs sm:max-w-sm">
+                  <div className="relative mb-2 bg-gradient-to-br from-gray-800/70 to-black/50 backdrop-blur-xl rounded-lg p-2 sm:p-3 border border-gray-600/50 shadow-xl shadow-black/40">
                     {/* Enhanced glass effect overlays */}
-                    <div className="absolute inset-0 bg-gradient-to-br from-gray-700/25 via-gray-800/15 to-transparent rounded-2xl"></div>
+                    <div className="absolute inset-0 bg-gradient-to-br from-gray-700/25 via-gray-800/15 to-transparent rounded-lg"></div>
                     <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gray-400/60 to-transparent"></div>
                     
-                    <p className="relative z-10 text-sm sm:text-base lg:text-lg font-medium leading-relaxed text-center text-gray-100">
+                    <p className="relative z-10 text-xs sm:text-sm font-medium leading-relaxed text-center text-gray-100">
                       {questionData.question}
                     </p>
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-2 sm:gap-3 mb-3 sm:mb-4">
+              <div className="grid grid-cols-1 gap-1 sm:gap-2 mb-2">
                 {questionData.options.map((option, index) => (
                   <button
                     key={index}
@@ -237,11 +237,11 @@ const PlayerQuestionRound = ({
                     {/* Shimmer effect */}
                     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent shimmer"></div>
                     
-                    <div className="flex items-center space-x-2 sm:space-x-3 relative z-10">
+                    <div className="flex items-center space-x-2 relative z-10">
                       {/* Option letter with gradient background */}
                       <div className={`
-                        flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 lg:w-9 lg:h-9 
-                        text-xs sm:text-sm lg:text-base font-bold text-white rounded-full flex-shrink-0 shadow-lg
+                        flex items-center justify-center w-5 h-5 sm:w-6 sm:h-6 
+                        text-xs font-bold text-white rounded-full flex-shrink-0 shadow-lg
                         ${index === 0 ? 'bg-gradient-to-br from-pink-400 to-rose-500' : 
                           index === 1 ? 'bg-gradient-to-br from-blue-400 to-indigo-500' :
                           index === 2 ? 'bg-gradient-to-br from-orange-400 to-amber-500' :
@@ -251,7 +251,7 @@ const PlayerQuestionRound = ({
                       </div>
                       
                       {/* Option text */}
-                      <span className="text-xs sm:text-sm lg:text-base break-words flex-1 text-left font-medium leading-tight text-white">
+                      <span className="text-xs sm:text-sm break-words flex-1 text-left font-medium leading-tight text-white">
                         {option}
                       </span>
                       
