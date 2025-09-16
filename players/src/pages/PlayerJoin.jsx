@@ -4,6 +4,87 @@ import { User, Users, GamepadIcon, ArrowRight, BookOpen, Mail, CreditCard } from
 import { toast } from 'react-hot-toast'
 import { gameService } from '../utils/gameService'
 
+const LOGO_SIZE = 112
+const MARGIN = 20
+const usedPositions = []
+
+const getRandomPosition = () => {
+  let attempts = 0
+  const maxAttempts = 50
+  
+  while (attempts < maxAttempts) {
+    const position = {
+      top: Math.random() * (window.innerHeight - LOGO_SIZE),
+      left: Math.random() * (window.innerWidth - LOGO_SIZE)
+    }
+
+    const hasOverlap = usedPositions.some(usedPos => {
+      const xOverlap = Math.abs(usedPos.left - position.left) < (LOGO_SIZE + MARGIN)
+      const yOverlap = Math.abs(usedPos.top - position.top) < (LOGO_SIZE + MARGIN)
+      return xOverlap && yOverlap
+    })
+
+    if (!hasOverlap) {
+      usedPositions.push(position)
+      return {
+        top: `${position.top}px`,
+        left: `${position.left}px`
+      }
+    }
+
+    attempts++
+  }
+
+  return {
+    top: '50%',
+    left: '50%'
+  }
+}
+
+const CryptoIcon = ({ icon }) => {
+  const [position] = useState(getRandomPosition())
+
+  React.useEffect(() => {
+    return () => {
+      const index = usedPositions.findIndex(
+        pos => pos.top === parseInt(position.top) && pos.left === parseInt(position.left)
+      )
+      if (index > -1) {
+        usedPositions.splice(index, 1)
+      }
+    }
+  }, [])
+
+  const cryptoUrls = {
+    bitcoin: '/assets/bitcoin-btc-logo.png',
+    ethereum: '/assets/ethereum-eth-logo.png',
+    binance: '/assets/binance-coin-bnb-logo.png',
+    doge_coin: '/assets/dogecoin-doge-logo.png',
+    black_coin: '/assets/blackcoin-blk-logo.png',
+    solana: '/assets/solana-sol-logo.png',
+    polkadot: '/assets/polkadot-new-dot-logo.png',
+    chainlink: '/assets/chainlink-link-logo.png',
+    avalanche: '/assets/avalanche-avax-logo.png',
+    polygon: '/assets/polygon-matic-logo.png',
+  }
+
+  return (
+    <img 
+      src={cryptoUrls[icon]} 
+      alt={icon} 
+      className="absolute opacity-40 w-28 h-28 animate-float"
+      style={{ 
+        top: position.top,
+        left: position.left
+      }}
+      onError={(e) => {
+        console.error(`Failed to load crypto icon: ${icon}`)
+        e.target.style.display = 'none'
+      }}
+    />
+  )
+}
+
 const PlayerJoin = ({ onJoin }) => {
   const [gameId, setGameId] = useState('')
   const [playerName, setPlayerName] = useState('')
@@ -76,43 +157,57 @@ const PlayerJoin = ({ onJoin }) => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-gray-800 flex items-center justify-center p-2 sm:p-4 lg:p-6">
-      <div className="w-full max-w-sm sm:max-w-md lg:max-w-lg">
+    <div className="relative min-h-screen bg-gradient-to-br from-black via-gray-900 to-gray-800 
+      flex items-center justify-center p-2 sm:p-4 lg:p-6 overflow-hidden">
+      {/* Add the crypto icons */}
+      <CryptoIcon icon="bitcoin" />
+      <CryptoIcon icon="ethereum" />
+      <CryptoIcon icon="binance" />
+      <CryptoIcon icon="doge_coin" />
+      <CryptoIcon icon="black_coin" />
+      <CryptoIcon icon="avalanche" />
+      <CryptoIcon icon="polkadot" />
+      <CryptoIcon icon="solana" />
+      <CryptoIcon icon="polygon" />
+      <CryptoIcon icon="chainlink" />
+
+      {/* Modify the main content wrapper to add backdrop blur */}
+      <div className="w-full max-w-[320px] xs:max-w-sm sm:max-w-md lg:max-w-lg relative z-10">
         {/* Header with Logo, Club Name and Decrypt2win in vertical order */}
-        <div className="text-center mb-4 sm:mb-6">
-          <div className="flex justify-center mb-3">
+        <div className="text-center mb-3 sm:mb-4 lg:mb-6">
+          <div className="flex justify-center mb-2 sm:mb-3">
             <img 
-              src="/logo.png" 
+              src="/assets/logo.png" 
               alt="Blockchain Club VITB" 
-              className="object-contain w-12 h-12 sm:w-16 sm:h-16"
+              className="object-contain w-10 h-10 xs:w-12 xs:h-12 sm:w-16 sm:h-16"
             />
           </div>
-          <h1 className="text-lg sm:text-xl font-bold bg-gradient-to-r from-gray-300 to-white bg-clip-text text-transparent mb-2" style={{fontFamily: 'Fira Code, monospace'}}>
+          <h1 className="text-base xs:text-lg sm:text-xl font-bold bg-gradient-to-r from-gray-300 to-white bg-clip-text text-transparent mb-1 sm:mb-2">
             Blockchain Club VITB
           </h1>
-          <h2 className="text-lg sm:text-xl font-bold bg-gradient-to-r from-gray-300 to-white bg-clip-text text-transparent" style={{fontFamily: 'Fira Code, monospace'}}>
+          <h2 className="text-base xs:text-lg sm:text-xl font-bold bg-gradient-to-r from-gray-300 to-white bg-clip-text text-transparent">
             Decrypt2win
           </h2>
         </div>
 
         {/* Header */}
-        <div className="mb-6 sm:mb-8 text-center">
-          <div className="flex justify-center mb-3 sm:mb-4">
-            <div className="p-3 sm:p-4 bg-white/10 backdrop-blur-md border border-white/20 rounded-full">
-              <GamepadIcon className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 text-gray-300" />
+        <div className="mb-4 sm:mb-6 lg:mb-8 text-center">
+          <div className="flex justify-center mb-2 sm:mb-3">
+            <div className="p-2 xs:p-3 sm:p-4 bg-white/10 backdrop-blur-md border border-white/20 rounded-full">
+              <GamepadIcon className="w-6 h-6 xs:w-8 xs:h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 text-gray-300" />
             </div>
           </div>
-          <h1 className="mb-2 text-2xl sm:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-gray-300 to-white bg-clip-text text-transparent" style={{fontFamily: 'Fira Code, monospace'}}>
+          <h1 className="mb-1 sm:mb-2 text-xl xs:text-2xl sm:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-gray-300 to-white bg-clip-text text-transparent">
             Player
           </h1>
-          <p className="text-gray-400 text-sm sm:text-base">
+          <p className="text-gray-400 text-xs xs:text-sm sm:text-base">
             Join an exciting game of Tambola!
           </p>
         </div>
 
         {/* Join Form */}
-        <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-xl shadow-2xl p-4 sm:p-6 lg:p-8 mb-4 sm:mb-6">
-          <form onSubmit={handleJoinGame} className="space-y-4 sm:space-y-6">
+        <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-xl shadow-2xl p-3 xs:p-4 sm:p-6 lg:p-8 mb-3 sm:mb-4 lg:mb-6">
+          <form onSubmit={handleJoinGame} className="space-y-3 xs:space-y-4 sm:space-y-6">
             <div>
               <label htmlFor="gameId" className="block mb-2 text-sm font-medium text-gray-300">
                 Game ID
@@ -125,7 +220,11 @@ const PlayerJoin = ({ onJoin }) => {
                   value={gameId}
                   onChange={(e) => setGameId(e.target.value.toUpperCase())}
                   placeholder="Enter Game ID"
-                  className="w-full py-2.5 sm:py-3 pl-10 sm:pl-12 pr-3 sm:pr-4 text-white placeholder-gray-500 transition-all bg-gray-800/80 border border-gray-600 rounded-lg focus:outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-400/20 text-sm sm:text-base"
+                  className="w-full py-2.5 sm:py-3 pl-10 sm:pl-12 pr-3 sm:pr-4 text-white placeholder-gray-500 
+                  transition-all duration-300 bg-gray-800/80 border border-gray-600 rounded-lg 
+                  focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 
+                  hover:border-blue-400 hover:shadow-[0_0_15px_rgba(59,130,246,0.15)] 
+                  focus:shadow-[0_0_20px_rgba(59,130,246,0.25)] text-sm sm:text-base"
                   disabled={isLoading}
                 />
               </div>
@@ -143,7 +242,11 @@ const PlayerJoin = ({ onJoin }) => {
                   value={playerName}
                   onChange={(e) => setPlayerName(e.target.value)}
                   placeholder="Enter your full name"
-                  className="w-full py-2.5 sm:py-3 pl-10 sm:pl-12 pr-3 sm:pr-4 text-white placeholder-gray-500 transition-all bg-gray-800/80 border border-gray-600 rounded-lg focus:outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-400/20 text-sm sm:text-base"
+                  className="w-full py-2.5 sm:py-3 pl-10 sm:pl-12 pr-3 sm:pr-4 text-white placeholder-gray-500 
+                  transition-all duration-300 bg-gray-800/80 border border-gray-600 rounded-lg 
+                  focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 
+                  hover:border-blue-400 hover:shadow-[0_0_15px_rgba(59,130,246,0.15)] 
+                  focus:shadow-[0_0_20px_rgba(59,130,246,0.25)] text-sm sm:text-base"
                   disabled={isLoading}
                 />
               </div>
@@ -161,7 +264,11 @@ const PlayerJoin = ({ onJoin }) => {
                   value={regNo}
                   onChange={(e) => setRegNo(e.target.value)}
                   placeholder="Enter your registration number"
-                  className="w-full py-2.5 sm:py-3 pl-10 sm:pl-12 pr-3 sm:pr-4 text-white placeholder-gray-500 transition-all bg-gray-800/80 border border-gray-600 rounded-lg focus:outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-400/20 text-sm sm:text-base"
+                  className="w-full py-2.5 sm:py-3 pl-10 sm:pl-12 pr-3 sm:pr-4 text-white placeholder-gray-500 
+                  transition-all duration-300 bg-gray-800/80 border border-gray-600 rounded-lg 
+                  focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 
+                  hover:border-blue-400 hover:shadow-[0_0_15px_rgba(59,130,246,0.15)] 
+                  focus:shadow-[0_0_20px_rgba(59,130,246,0.25)] text-sm sm:text-base"
                   disabled={isLoading}
                 />
               </div>
@@ -179,7 +286,11 @@ const PlayerJoin = ({ onJoin }) => {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="Enter your email address"
-                  className="w-full py-2.5 sm:py-3 pl-10 sm:pl-12 pr-3 sm:pr-4 text-white placeholder-gray-500 transition-all bg-gray-800/80 border border-gray-600 rounded-lg focus:outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-400/20 text-sm sm:text-base"
+                  className="w-full py-2.5 sm:py-3 pl-10 sm:pl-12 pr-3 sm:pr-4 text-white placeholder-gray-500 
+                  transition-all duration-300 bg-gray-800/80 border border-gray-600 rounded-lg 
+                  focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 
+                  hover:border-blue-400 hover:shadow-[0_0_15px_rgba(59,130,246,0.15)] 
+                  focus:shadow-[0_0_20px_rgba(59,130,246,0.25)] text-sm sm:text-base"
                   disabled={isLoading}
                 />
               </div>
@@ -188,7 +299,15 @@ const PlayerJoin = ({ onJoin }) => {
             <button
               type="submit"
               disabled={isLoading || !gameId.trim() || !playerName.trim() || !regNo.trim() || !email.trim()}
-              className="flex items-center justify-center w-full gap-2 px-4 sm:px-6 py-2.5 sm:py-3 font-semibold text-white transition-all duration-300 bg-gradient-to-r from-gray-700 to-black hover:from-gray-600 hover:to-gray-800 rounded-lg shadow-lg hover:shadow-xl transform hover:scale-105 disabled:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none text-sm sm:text-base"
+              className="flex items-center justify-center w-full gap-2 px-4 sm:px-6 py-2.5 sm:py-3 
+                font-semibold text-white transition-all duration-300 
+                bg-gray-800/80 border border-gray-600 rounded-lg
+                hover:border-blue-400 hover:shadow-[0_0_15px_rgba(59,130,246,0.15)]
+                focus:shadow-[0_0_20px_rgba(59,130,246,0.25)]
+                hover:bg-blue-600 hover:border-blue-500
+                disabled:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed 
+                disabled:hover:border-gray-600 disabled:hover:shadow-none
+                text-sm sm:text-base"
             >
               {isLoading ? (
                 <>
@@ -206,18 +325,19 @@ const PlayerJoin = ({ onJoin }) => {
         </div>
 
         {/* Instructions Link */}
-        <div className="text-center mb-4 sm:mb-6">
+        <div className="text-center mb-3 sm:mb-4">
           <button
             onClick={handleViewInstructions}
-            className="inline-flex items-center gap-2 font-medium text-gray-300 transition-colors hover:text-white text-sm sm:text-base"
+            className="inline-flex items-center gap-1 xs:gap-2 font-medium text-gray-300 
+            transition-colors hover:text-white text-xs xs:text-sm sm:text-base"
           >
-            <BookOpen className="w-4 h-4 sm:w-5 sm:h-5" />
+            <BookOpen className="w-3 h-3 xs:w-4 xs:h-4 sm:w-5 sm:h-5" />
             How to Play Tambola
           </button>
         </div>
 
         {/* Footer */}
-        <div className="text-xs sm:text-sm text-center text-gray-500 px-2">
+        <div className="text-[10px] xs:text-xs sm:text-sm text-center text-gray-500 px-2">
           Need a Game ID? Ask your game host to share it with you.
         </div>
       </div>
