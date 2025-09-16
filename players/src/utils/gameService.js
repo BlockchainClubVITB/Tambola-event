@@ -515,6 +515,53 @@ export class GameService {
       return { success: false, error: error.message }
     }
   }
+
+  // Get player's current score and leaderboard position
+  async getPlayerScoreAndPosition(gameId, playerId) {
+    try {
+      // Get all players in the game sorted by score descending
+      const playersResult = await databases.listDocuments(
+        this.dbId,
+        this.collections.players,
+        [
+          Query.equal('gameId', gameId),
+          Query.orderDesc('score'),
+          Query.limit(100) // Get top 100 players for position calculation
+        ]
+      )
+
+      if (!playersResult.documents.length) {
+        return { success: false, error: 'No players found in game' }
+      }
+
+      // Find the player's data and position
+      const players = playersResult.documents
+      let playerData = null
+      let position = null
+
+      for (let i = 0; i < players.length; i++) {
+        if (players[i].$id === playerId) {
+          playerData = players[i]
+          position = i + 1 // Position is 1-based
+          break
+        }
+      }
+
+      if (!playerData) {
+        return { success: false, error: 'Player not found in game' }
+      }
+
+      return {
+        success: true,
+        score: playerData.score || 0,
+        position: position,
+        totalPlayers: players.length
+      }
+    } catch (error) {
+      console.error('Failed to get player score and position:', error)
+      return { success: false, error: error.message }
+    }
+  }
 }
 
 export const gameService = new GameService()

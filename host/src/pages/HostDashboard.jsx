@@ -44,6 +44,17 @@ const HostDashboard = () => {
   const [lastGameStateHash, setLastGameStateHash] = useState('') // Cache to avoid unnecessary updates
   const [lastPlayersCount, setLastPlayersCount] = useState(0) // Track player count changes
   
+  // Cache for data optimization
+  const [dataCache, setDataCache] = useState({
+    leaderboard: null,
+    winners: null,
+    lastUpdate: 0,
+    gameHash: ''
+  })
+  
+  // Cache duration (30 seconds)
+  const CACHE_DURATION = 30000
+  
   // Navigation
   const location = useLocation()
   const [searchParams] = useSearchParams()
@@ -155,46 +166,76 @@ const HostDashboard = () => {
     }
   }
 
-  // Optimized refresh function - fetches all data in minimal requests
-  const refreshAllData = async (showToast = true) => {
+  // Optimized refresh function with caching - fetches all data in minimal requests
+  const refreshAllData = async (showToast = true, forceRefresh = false) => {
     try {
+      const now = Date.now()
+      
+      // Check cache first (unless forced refresh)
+      if (!forceRefresh && dataCache.lastUpdate && (now - dataCache.lastUpdate) < CACHE_DURATION) {
+        console.log('📋 Using cached data, skipping API calls')
+        if (showToast) toast.success('Data refreshed from cache!')
+        return
+      }
+      
       if (showToast) toast.loading('Refreshing all data...')
       
-      // Single request for leaderboard/players
-      const leaderboardResult = await gameService.getLeaderboard(gameId)
+      // Generate current game state hash for change detection
+      const currentGameHash = `${selectedNumbers.length}-${currentNumber}-${gameState}`
       
-      // Single request for game data  
-      const gameResult = await gameService.getGame(gameId)
-      
-      // Single request for all winners
-      const winnersResult = await gameService.getAllWinners(gameId)
-      
-      // Process results
-      if (leaderboardResult.success) {
-        setLeaderboard(leaderboardResult.players)
-        setPlayers(leaderboardResult.players) // Use same data for players count
-      }
-      
-      if (gameResult.success) {
-        setGameDoc(gameResult.game)
-        // Update player count from game data
-        const playerCount = gameResult.game.playerCount || 0
-        if (showToast) toast.success(`Refreshed! ${playerCount} players, ${leaderboardResult.players?.length || 0} scores`)
-      }
-      
-      if (winnersResult.success) {
-        // Flatten all winners into single array for pagination
-        const flatWinners = []
-        Object.entries(winnersResult.winners).forEach(([condition, winners]) => {
-          winners.forEach(winner => {
-            flatWinners.push({
-              ...winner,
-              winCondition: condition,
-              correctCount: winner.correctNumbers?.length || 0
+      // Only fetch if game state changed or cache expired
+      if (forceRefresh || currentGameHash !== dataCache.gameHash || (now - dataCache.lastUpdate) > CACHE_DURATION) {
+        console.log('🔄 Game state changed or cache expired, fetching fresh data...')
+        
+        // Single request for leaderboard/players
+        const leaderboardResult = await gameService.getLeaderboard(gameId)
+        
+        // Single request for game data  
+        const gameResult = await gameService.getGame(gameId)
+        
+        // Single request for all winners
+        const winnersResult = await gameService.getAllWinners(gameId)
+        
+        // Process results
+        if (leaderboardResult.success) {
+          setLeaderboard(leaderboardResult.players)
+          setPlayers(leaderboardResult.players) // Use same data for players count
+        }
+        
+        if (gameResult.success) {
+          setGameDoc(gameResult.game)
+          // Update player count from game data
+          const playerCount = gameResult.game.playerCount || 0
+          if (showToast) toast.success(`Refreshed! ${playerCount} players, ${leaderboardResult.players?.length || 0} scores`)
+        }
+        
+        if (winnersResult.success) {
+          // Flatten all winners into single array for pagination
+          const flatWinners = []
+          Object.entries(winnersResult.winners).forEach(([condition, winners]) => {
+            winners.forEach(winner => {
+              flatWinners.push({
+                ...winner,
+                winCondition: condition,
+                correctCount: winner.correctNumbers?.length || 0
+              })
             })
           })
+          setAllWinners(flatWinners)
+        }
+        
+        // Update cache
+        setDataCache({
+          leaderboard: leaderboardResult.players,
+          winners: winnersResult.winners,
+          lastUpdate: now,
+          gameHash: currentGameHash
         })
-        setAllWinners(flatWinners)
+        
+        console.log('✅ Data refreshed and cached')
+      } else {
+        console.log('📋 No changes detected, using existing data')
+        if (showToast) toast.success('Data is up to date!')
       }
       
       if (showToast) toast.dismiss() // Dismiss loading toast
@@ -207,34 +248,52 @@ const HostDashboard = () => {
         toast.error('Failed to refresh data')
       }
       
-      // Auto-retry on error
+      // Auto-retry on error with exponential backoff
       setTimeout(() => {
         console.log('🔄 Auto-retrying data refresh...')
-        refreshAllData(false) // Retry without toast
-      }, 3000)
+        refreshAllData(false, false) // Retry without toast, no force refresh
+      }, 5000) // Increased retry delay
       
       return false
     }
   }
 
-  // Auto-refresh leaderboard when game is active
+  // Smart auto-refresh leaderboard when game is active with adaptive frequency
   useEffect(() => {
     let autoRefreshInterval
     
     if (gameState === 'active' && gameId) {
-      // Auto-refresh all data every 15 seconds during active games
-      autoRefreshInterval = setInterval(() => {
-        console.log('🔄 Auto-refreshing all data...')
-        refreshAllData(false) // Silent refresh
-      }, 15000)
+      // Adaptive refresh frequency based on game activity
+      const getRefreshInterval = () => {
+        const recentActivity = Date.now() - (dataCache.lastUpdate || 0)
+        
+        // If recent activity (< 5 minutes), refresh more frequently
+        if (recentActivity < 300000) { // 5 minutes
+          return 20000 // 20 seconds for active periods
+        } else {
+          return 45000 // 45 seconds for quiet periods
+        }
+      }
+      
+      const scheduleNextRefresh = () => {
+        const interval = getRefreshInterval()
+        autoRefreshInterval = setTimeout(() => {
+          console.log(`🔄 Smart auto-refresh (${interval/1000}s interval)...`)
+          refreshAllData(false, false) // Silent refresh, no force
+          scheduleNextRefresh() // Schedule next refresh
+        }, interval)
+      }
+      
+      // Start the adaptive refresh cycle
+      scheduleNextRefresh()
     }
 
     return () => {
       if (autoRefreshInterval) {
-        clearInterval(autoRefreshInterval)
+        clearTimeout(autoRefreshInterval)
       }
     }
-  }, [gameState, gameId])
+  }, [gameState, gameId, selectedNumbers.length]) // Also depend on game activity
 
   // Separate function to fetch players (only when needed)
   const fetchPlayers = async () => {
@@ -266,7 +325,7 @@ const HostDashboard = () => {
         startPolling()
         
         // Load initial winners data
-        refreshAllData(false) // Silent initial load
+        refreshAllData(false, false) // Silent initial load
         
         console.log('Game loaded with ID:', gameIdFromParams)
       } else {
@@ -295,8 +354,13 @@ const HostDashboard = () => {
     setRoundPhase('idle')
     setTimeRemaining(0)
     
-    // No automatic refresh - host can manually refresh leaderboard if needed
-    console.log('Question round completed, number locked on frontend')
+    // Invalidate cache to force fresh data after round completion
+    setDataCache(prev => ({ ...prev, lastUpdate: 0 }))
+    
+    // Smart refresh - only fetch if significant time has passed or force needed
+    setTimeout(() => {
+      refreshAllData(false, false) // Silent refresh, will use cache if recent
+    }, 2000) // Small delay to ensure all players have submitted
     
     // Clear current number display
     setCurrentNumber(null)
@@ -336,6 +400,9 @@ const HostDashboard = () => {
 
     console.log(`Selected number from board: ${number}`)
 
+    // Invalidate cache on game events for immediate updates
+    setDataCache(prev => ({ ...prev, lastUpdate: 0 }))
+
     // Set the current number and start the round
     // Do NOT update selectedNumbers here - let the QuestionRound component handle database update
     // and then we'll fetch the updated state after
@@ -365,6 +432,9 @@ const HostDashboard = () => {
       if (gameDoc) {
         await gameService.resetGame(gameId)
       }
+      
+      // Invalidate cache on reset
+      setDataCache({ leaderboard: null, winners: null, lastUpdate: 0, gameHash: '' })
       
       // Then reset local state
       setGameState('waiting')
@@ -429,7 +499,7 @@ const HostDashboard = () => {
         
         // Fetch initial players and leaderboard after starting
         await fetchPlayers()
-        await refreshAllData()
+        await refreshAllData(true, true) // Force refresh on reset
         
         toast.success('Game started successfully!')
         console.log('Game started successfully')
@@ -450,50 +520,50 @@ const HostDashboard = () => {
   }
 
   return (
-  <div className="relative flex items-center justify-center min-h-screen p-4 text-white bg-black overflow-hidden">
+  <div className="relative flex items-center justify-center min-h-screen p-4 overflow-hidden text-white bg-black">
       {/* Glassmorphism background shapes */}
-      <div className="absolute top-0 left-0 w-full h-full pointer-events-none z-0">
+      <div className="absolute top-0 left-0 z-0 w-full h-full pointer-events-none">
         <div className="absolute left-[-100px] top-[-100px] w-[400px] h-[400px] bg-gradient-to-br from-blue-500/30 to-purple-500/20 rounded-full blur-3xl opacity-70 animate-pulse"></div>
         <div className="absolute right-[-120px] bottom-[-120px] w-[350px] h-[350px] bg-gradient-to-tr from-pink-500/20 to-yellow-500/10 rounded-full blur-2xl opacity-60 animate-pulse"></div>
         <div className="absolute left-1/2 top-1/3 w-[200px] h-[200px] bg-gradient-to-br from-green-400/20 to-blue-400/10 rounded-full blur-2xl opacity-40 animate-pulse"></div>
       </div>
-      <div className="max-w-7xl mx-auto w-full z-10">
+      <div className="z-10 w-full mx-auto max-w-7xl">
         {/* Blockchain Club VITB Header (glass card) */}
-        <div className="mb-6 p-6 bg-gray-900/60 backdrop-blur-md border border-gray-800 shadow-2xl rounded-xl flex items-center justify-between transform transition-all duration-700 ease-out opacity-0 animate-fade-in-up">
+        <div className="flex items-center justify-between p-6 mb-6 transition-all duration-700 ease-out transform border border-gray-800 shadow-2xl opacity-0 bg-gray-900/60 backdrop-blur-md rounded-xl animate-fade-in-up">
           <div className="flex items-center gap-4">
             <img 
               src="/logo.png" 
               alt="Blockchain Club VITB" 
-              className="w-14 h-14 object-contain"
+              className="object-contain w-14 h-14"
             />
             <div className="text-left">
               <h1 className="text-2xl font-extrabold tracking-tight text-white">Blockchain Club VITB</h1>
             </div>
           </div>
           <div className="text-right">
-            <h1 className="text-3xl lg:text-4xl font-extrabold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-purple-400 to-yellow-300 drop-shadow-lg animate-gradient-x">
+            <h1 className="text-3xl font-extrabold tracking-wide text-transparent lg:text-4xl bg-clip-text bg-gradient-to-r from-blue-400 via-purple-400 to-yellow-300 drop-shadow-lg animate-gradient-x">
               Decrypt2Win
             </h1>
-            <p className="text-base text-gray-200 font-semibold italic tracking-wide mt-1">Blockchain Tambola</p>
+            <p className="mt-1 text-base italic font-semibold tracking-wide text-gray-200">Blockchain Tambola</p>
           </div>
         </div>
 
         {/* Header */}
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 mb-6">
+        <div className="flex flex-col items-start justify-between gap-4 mb-6 lg:flex-row lg:items-center">
           <div className="flex items-center gap-4">
             <button
               onClick={() => navigate('/setup')}
-              className="flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
+              className="flex items-center gap-2 px-3 py-2 transition-colors bg-gray-800 rounded-lg hover:bg-gray-700"
             >
               <ArrowLeft className="w-4 h-4" />
               Back to Setup
             </button>
             <div>
-              <h1 className="text-3xl font-bold text-white mb-2">Host Dashboard</h1>
+              <h1 className="mb-2 text-3xl font-bold text-white">Host Dashboard</h1>
               <div className="flex items-center gap-6 text-sm text-gray-400">
                 <span className="flex items-center gap-2">
                   <Users className="w-4 h-4" />
-                  Game ID: <span className="font-mono text-blue-400 text-lg font-bold">{gameId || 'Loading...'}</span>
+                  Game ID: <span className="font-mono text-lg font-bold text-blue-400">{gameId || 'Loading...'}</span>
                 </span>
                 <span className="flex items-center gap-2">
                   Host: <span className="text-green-400">{hostName}</span>
@@ -551,8 +621,8 @@ const HostDashboard = () => {
         </div>
 
         {/* Game Status Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="p-4 bg-gray-900/50 backdrop-blur-sm border border-gray-800 rounded-xl">
+        <div className="grid grid-cols-2 gap-4 mb-6 md:grid-cols-4">
+          <div className="p-4 border border-gray-800 bg-gray-900/50 backdrop-blur-sm rounded-xl">
             <div className="flex items-center gap-3">
               <div className={`w-3 h-3 rounded-full ${
                 gameState === 'waiting' ? 'bg-yellow-500' :
@@ -565,21 +635,21 @@ const HostDashboard = () => {
             </div>
           </div>
 
-          <div className="p-4 bg-gray-900/50 backdrop-blur-sm border border-gray-800 rounded-xl transform transition-all duration-500 ease-out opacity-0 animate-fade-in-up">
+          <div className="p-4 transition-all duration-500 ease-out transform border border-gray-800 opacity-0 bg-gray-900/50 backdrop-blur-sm rounded-xl animate-fade-in-up">
             <div className="flex items-center gap-3">
               <Clock className="w-5 h-5 text-blue-400" />
               <span className="text-white">Numbers Called: {selectedNumbers.length}/50</span>
             </div>
           </div>
 
-          <div className="p-4 bg-gray-900/50 backdrop-blur-sm border border-gray-800 rounded-xl transform transition-all duration-500 ease-out opacity-0 animate-fade-in-up delay-75">
+          <div className="p-4 transition-all duration-500 ease-out delay-75 transform border border-gray-800 opacity-0 bg-gray-900/50 backdrop-blur-sm rounded-xl animate-fade-in-up">
             <div className="flex items-center gap-3">
               <Users className="w-5 h-5 text-green-400" />
               <span className="text-white">Players: {players.length}</span>
             </div>
           </div>
 
-          <div className="p-4 bg-gray-900/50 backdrop-blur-sm border border-gray-800 rounded-xl transform transition-all duration-500 ease-out opacity-0 animate-fade-in-up delay-150">
+          <div className="p-4 transition-all duration-500 ease-out delay-150 transform border border-gray-800 opacity-0 bg-gray-900/50 backdrop-blur-sm rounded-xl animate-fade-in-up">
             <div className="flex items-center gap-3">
               <span className="text-white">Phase: </span>
               <span className={`font-bold ${
@@ -594,20 +664,20 @@ const HostDashboard = () => {
         </div>
 
         {/* Game Control Buttons */}
-        <div className="mb-6 flex flex-col sm:flex-row gap-4 justify-center">
+        <div className="flex flex-col justify-center gap-4 mb-6 sm:flex-row">
           {gameState === 'waiting' && (
             <button
               onClick={handleStartGame}
-              className="px-8 py-4 rounded-xl font-bold text-lg bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white shadow-lg hover:shadow-xl transition-all"
+              className="px-8 py-4 text-lg font-bold text-white transition-all shadow-lg rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 hover:shadow-xl"
             >
-              <Play className="w-5 h-5 inline mr-2" />
+              <Play className="inline w-5 h-5 mr-2" />
               Start Game
             </button>
           )}
           
           {gameState === 'active' && roundStarted && (
             <div className="text-center">
-              <p className="text-xl text-orange-400 font-semibold">
+              <p className="text-xl font-semibold text-orange-400">
                 Question Round in Progress...
               </p>
             </div>
@@ -615,10 +685,10 @@ const HostDashboard = () => {
         </div>
 
         {/* Main Layout */}
-        <div className="grid lg:grid-cols-3 gap-6">
+        <div className="grid gap-6 lg:grid-cols-3">
           {/* Left Column - Complete Board */}
-          <div className="lg:col-span-2 space-y-6">
-            <div className="p-6 bg-gray-900/60 backdrop-blur-md border border-gray-800 rounded-xl shadow-2xl transform transition-all duration-500 ease-out opacity-0 animate-fade-in-up">
+          <div className="space-y-6 lg:col-span-2">
+            <div className="p-6 transition-all duration-500 ease-out transform border border-gray-800 shadow-2xl opacity-0 bg-gray-900/60 backdrop-blur-md rounded-xl animate-fade-in-up">
               <CompleteBoard
               selectedNumbers={selectedNumbers}
               currentNumber={currentNumber}
@@ -627,7 +697,7 @@ const HostDashboard = () => {
             </div>
             
             {/* Winners Board Section */}
-            <div className="p-6 bg-gray-900/60 backdrop-blur-md border border-gray-800 rounded-xl shadow-2xl transform transition-all duration-500 ease-out opacity-0 animate-fade-in-up delay-100">
+            <div className="p-6 transition-all duration-500 ease-out delay-100 transform border border-gray-800 shadow-2xl opacity-0 bg-gray-900/60 backdrop-blur-md rounded-xl animate-fade-in-up">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
                   <Trophy className="w-6 h-6 text-yellow-400" />
@@ -655,7 +725,7 @@ const HostDashboard = () => {
               </div>
 
               {winnersLastUpdate && (
-                <div className="mb-4 text-xs text-gray-400 flex items-center gap-2">
+                <div className="flex items-center gap-2 mb-4 text-xs text-gray-400">
                   <Clock className="w-3 h-3" />
                   Last updated: {winnersLastUpdate.toLocaleTimeString()}
                 </div>
@@ -703,7 +773,7 @@ const HostDashboard = () => {
                           {conditionWinners.slice(0, 5).map((winner, index) => (
                             <div 
                               key={winner.$id}
-                              className="flex items-center justify-between p-2 bg-gray-800/70 rounded"
+                              className="flex items-center justify-between p-2 rounded bg-gray-800/70"
                             >
                               <div className="flex items-center gap-3">
                                 <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
@@ -718,7 +788,7 @@ const HostDashboard = () => {
                               </div>
                               
                               <div className="flex items-center gap-3 text-sm">
-                                <span className="text-green-400 font-medium">{winner.score || 0} pts</span>
+                                <span className="font-medium text-green-400">{winner.score || 0} pts</span>
                                 {winner.winTimestamps && winner.winTimestamps[condition] && (
                                   <span className="text-gray-400">
                                     {(() => {
@@ -741,7 +811,7 @@ const HostDashboard = () => {
                           ))}
                           
                           {conditionWinners.length > 5 && (
-                            <div className="text-center text-sm text-gray-400 pt-2">
+                            <div className="pt-2 text-sm text-center text-gray-400">
                               +{conditionWinners.length - 5} more winners
                             </div>
                           )}
@@ -750,7 +820,7 @@ const HostDashboard = () => {
 
                       {/* No Winners State */}
                       {!hasWinners && (
-                        <div className="text-center py-2 text-gray-500 text-sm">
+                        <div className="py-2 text-sm text-center text-gray-500">
                           No winners yet
                         </div>
                       )}
@@ -762,13 +832,13 @@ const HostDashboard = () => {
           </div>
 
           {/* Right Column - Leaderboard */}
-          <div className="space-y-6 transform transition-all duration-500 ease-out opacity-0 animate-fade-in-up delay-150">
+          <div className="space-y-6 transition-all duration-500 ease-out delay-150 transform opacity-0 animate-fade-in-up">
             <div>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-white">Leaderboard</h3>
                 <button
                   onClick={refreshAllData}
-                  className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg hover:opacity-95 shadow-md transition-all"
+                  className="px-4 py-2 text-sm font-medium text-white transition-all rounded-lg shadow-md bg-gradient-to-r from-blue-600 to-purple-600 hover:opacity-95"
                 >
                   Refresh All
                 </button>
@@ -793,26 +863,26 @@ const HostDashboard = () => {
         {/* QR Code Share Popup */}
         {showQRPopup && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-            <div className="bg-slate-900 border border-slate-700 rounded-2xl p-8 max-w-md w-full shadow-2xl">
+            <div className="w-full max-w-md p-8 border shadow-2xl bg-slate-900 border-slate-700 rounded-2xl">
               <div className="text-center">
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-2xl font-bold text-white">Share Game</h3>
                   <button
                     onClick={() => setShowQRPopup(false)}
-                    className="text-gray-400 hover:text-white transition-colors"
+                    className="text-gray-400 transition-colors hover:text-white"
                   >
                     ✕
                   </button>
                 </div>
                 
                 {/* Game ID Display */}
-                <div className="mb-6 p-4 bg-gradient-to-r from-blue-900/50 to-purple-900/50 rounded-xl border border-blue-500/30">
-                  <div className="text-sm text-gray-400 mb-1">Game ID</div>
-                  <div className="text-3xl font-bold text-blue-400 font-mono tracking-wider">{gameId}</div>
+                <div className="p-4 mb-6 border bg-gradient-to-r from-blue-900/50 to-purple-900/50 rounded-xl border-blue-500/30">
+                  <div className="mb-1 text-sm text-gray-400">Game ID</div>
+                  <div className="font-mono text-3xl font-bold tracking-wider text-blue-400">{gameId}</div>
                 </div>
 
                 {/* QR Code */}
-                <div className="mb-6 p-6 bg-white rounded-xl">
+                <div className="p-6 mb-6 bg-white rounded-xl">
                   <img 
                     src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`https://blockchain-decrypt2win.vercel.app/?gameId=${gameId}`)}&bgcolor=ffffff&color=000000&qzone=2&format=png`}
                     alt="QR Code"
@@ -822,8 +892,8 @@ const HostDashboard = () => {
 
                 {/* Game Link */}
                 <div className="mb-6">
-                  <div className="text-sm text-gray-400 mb-2">Game Link</div>
-                  <div className="p-3 bg-gray-800 rounded-lg border border-gray-600">
+                  <div className="mb-2 text-sm text-gray-400">Game Link</div>
+                  <div className="p-3 bg-gray-800 border border-gray-600 rounded-lg">
                     <div className="text-sm text-blue-400 break-all">
                       https://blockchain-decrypt2win.vercel.app/?gameId={gameId}
                     </div>
@@ -837,7 +907,7 @@ const HostDashboard = () => {
                       navigator.clipboard.writeText(`https://blockchain-decrypt2win.vercel.app/?gameId=${gameId}`)
                       toast.success('Game link copied to clipboard!')
                     }}
-                    className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
+                    className="flex-1 px-4 py-3 font-medium text-white transition-colors bg-blue-600 rounded-lg hover:bg-blue-700"
                   >
                     Copy Link
                   </button>
@@ -847,7 +917,7 @@ const HostDashboard = () => {
                       navigator.clipboard.writeText(gameId)
                       toast.success('Game ID copied to clipboard!')
                     }}
-                    className="flex-1 px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors font-medium"
+                    className="flex-1 px-4 py-3 font-medium text-white transition-colors bg-green-600 rounded-lg hover:bg-green-700"
                   >
                     Copy ID
                   </button>
