@@ -1,101 +1,74 @@
-// Winning criteria functions for Tambola game
-// Based on a 50-number board (1-50) arranged in 5 rows x 10 columns
+// Traditional Tambola Winning Criteria
+// Based on player's ticket (3 rows x 5 numbers = 15 numbers total)
 
 /**
- * Convert number to board position
- * Board layout: 
- * Row 1: 1-10, Row 2: 11-20, Row 3: 21-30, Row 4: 31-40, Row 5: 41-50
+ * Check if player has won "Early Five" - First to reach 50 points
+ * 50 points for first player to achieve this
  */
-const getPosition = (number) => {
-  const row = Math.ceil(number / 10) - 1 // 0-4
-  const col = ((number - 1) % 10) // 0-9
-  return { row, col }
+export const checkEarlyFive = (playerScore) => {
+  return playerScore >= 50
 }
 
 /**
- * Check if player has won "Early Adopter" - First 5 numbers marked correctly
+ * Check if player has won "Any Row" - Any complete row (first, second, or third)
  */
-export const checkEarlyAdopter = (correctNumbers) => {
-  return correctNumbers.size >= 5
-}
-
-/**
- * Check if player has won "Gas Saver" - First row complete (numbers 1-10)
- */
-export const checkGasSaver = (correctNumbers) => {
-  const firstRowNumbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-  return firstRowNumbers.every(num => correctNumbers.has(num))
-}
-
-/**
- * Check if player has won "Corner Nodes" - All 4 corners marked correctly
- * Corners: 1 (top-left), 10 (top-right), 41 (bottom-left), 50 (bottom-right)
- */
-export const checkCornerNodes = (correctNumbers) => {
-  const corners = [1, 10, 41, 50]
-  return corners.every(num => correctNumbers.has(num))
-}
-
-/**
- * Check if player has won "Miner of the Day" - Any 2 complete rows
- */
-export const checkMinerOfTheDay = (correctNumbers) => {
-  const rows = [
-    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],      // Row 1
-    [11, 12, 13, 14, 15, 16, 17, 18, 19, 20], // Row 2
-    [21, 22, 23, 24, 25, 26, 27, 28, 29, 30], // Row 3
-    [31, 32, 33, 34, 35, 36, 37, 38, 39, 40], // Row 4
-    [41, 42, 43, 44, 45, 46, 47, 48, 49, 50]  // Row 5
-  ]
+export const checkAnyRow = (correctNumbers, playerTicket, incorrectNumbers = new Set()) => {
+  const rows = playerTicket || []
   
-  let completedRows = 0
-  for (const row of rows) {
-    if (row.every(num => correctNumbers.has(num))) {
-      completedRows++
-      if (completedRows >= 2) return true
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i] || []
+    
+    // Check if any numbers in this row were answered incorrectly
+    const hasIncorrectInRow = row.some(num => incorrectNumbers.has(num))
+    
+    if (!hasIncorrectInRow && row.every(num => correctNumbers.has(num))) {
+      return true // This row is complete and unblocked
     }
   }
+  
   return false
 }
 
 /**
- * Check if player has won "Full Blockchain" - All 50 numbers marked correctly
+ * Check if player has won "Full House" - All 15 numbers in ticket marked correctly
  */
-export const checkFullBlockchain = (correctNumbers) => {
-  return correctNumbers.size >= 50
+export const checkFullHouse = (correctNumbers, playerTicket, incorrectNumbers = new Set()) => {
+  const ticketNumbers = playerTicket.flat()
+  
+  // Check if any ticket numbers were answered incorrectly
+  const hasIncorrectTicketNumbers = ticketNumbers.some(num => incorrectNumbers.has(num))
+  if (hasIncorrectTicketNumbers) {
+    return false // Blocked
+  }
+  
+  return ticketNumbers.every(num => correctNumbers.has(num))
 }
 
 /**
  * Check all winning conditions and return which ones are newly achieved
+ * Uses the database column names: earlyAdopter, gasSaver, cornerNodes, minerOfDay, fullBlockchain
  * @param {Set} correctNumbers - Set of correctly answered numbers
  * @param {Object} previousWins - Object tracking which conditions were already won
- * @returns {Object} - Object with newly achieved wins
+ * @param {Array} playerTicket - Player's 3x5 ticket array
+ * @param {Set} incorrectNumbers - Set of incorrectly answered numbers (for blocking logic)
+ * @param {number} playerScore - Player's current score for Early Five check
+ * @returns {Object} - Object with newly achieved wins using database column names
  */
-export const checkAllWinningConditions = (correctNumbers, previousWins = {}) => {
+export const checkAllWinningConditions = (correctNumbers, previousWins = {}, playerTicket = [], incorrectNumbers = new Set(), playerScore = 0) => {
   const newWins = {}
   
-  // Check Early Adopter
-  if (!previousWins.earlyAdopter && checkEarlyAdopter(correctNumbers)) {
+  // Check Early Five (earlyAdopter) - first to 50 points, not blocked by incorrect answers
+  if (!previousWins.earlyAdopter && checkEarlyFive(playerScore)) {
     newWins.earlyAdopter = true
   }
   
-  // Check Gas Saver
-  if (!previousWins.gasSaver && checkGasSaver(correctNumbers)) {
+  // Check Any Row (gasSaver) - any complete row, blocked by incorrect numbers in that row
+  if (!previousWins.gasSaver && checkAnyRow(correctNumbers, playerTicket, incorrectNumbers)) {
     newWins.gasSaver = true
   }
   
-  // Check Corner Nodes
-  if (!previousWins.cornerNodes && checkCornerNodes(correctNumbers)) {
-    newWins.cornerNodes = true
-  }
-  
-  // Check Miner of the Day
-  if (!previousWins.minerOfDay && checkMinerOfTheDay(correctNumbers)) {
-    newWins.minerOfDay = true
-  }
-  
-  // Check Full Blockchain
-  if (!previousWins.fullBlockchain && checkFullBlockchain(correctNumbers)) {
+  // Check Full House (fullBlockchain) - all 15 numbers, blocked by any incorrect ticket number
+  if (!previousWins.fullBlockchain && checkFullHouse(correctNumbers, playerTicket, incorrectNumbers)) {
     newWins.fullBlockchain = true
   }
   
@@ -103,102 +76,138 @@ export const checkAllWinningConditions = (correctNumbers, previousWins = {}) => 
 }
 
 /**
- * Get winning condition descriptions
+ * Check which winning conditions are permanently blocked
+ * @param {Set} incorrectNumbers - Set of incorrectly answered numbers
+ * @param {Array} playerTicket - Player's 3x5 ticket array
+ * @returns {Object} - Object indicating which conditions are blocked
+ */
+export const getBlockedConditions = (incorrectNumbers = new Set(), playerTicket = []) => {
+  const blocked = {}
+  const ticketNumbers = playerTicket.flat()
+  
+  // Early Five (earlyAdopter) is NEVER blocked - it's based on total score, not ticket numbers
+  blocked.earlyAdopter = { blocked: false, reason: null }
+  
+  // Any Row (gasSaver) - check if all rows are blocked
+  const rows = playerTicket || []
+  let allRowsBlocked = true
+  
+  for (const row of rows) {
+    if (row && row.length === 5) {
+      const hasIncorrectInRow = row.some(num => incorrectNumbers.has(num))
+      if (!hasIncorrectInRow) {
+        allRowsBlocked = false
+        break
+      }
+    }
+  }
+  
+  if (allRowsBlocked && rows.length > 0) {
+    blocked.gasSaver = {
+      blocked: true,
+      reason: "All rows have incorrect numbers"
+    }
+  } else {
+    blocked.gasSaver = { blocked: false, reason: null }
+  }
+  
+  // Full House (fullBlockchain) - blocked if any ticket number is incorrect
+  const hasIncorrectTicketNumbers = ticketNumbers.some(num => incorrectNumbers.has(num))
+  
+  if (hasIncorrectTicketNumbers) {
+    const incorrectCount = ticketNumbers.filter(num => incorrectNumbers.has(num)).length
+    blocked.fullBlockchain = {
+      blocked: true,
+      reason: `${incorrectCount} ticket number(s) answered incorrectly`
+    }
+  } else {
+    blocked.fullBlockchain = { blocked: false, reason: null }
+  }
+  
+  return blocked
+}
+
+/**
+ * Get winning condition descriptions with database column mapping
  */
 export const getWinConditionInfo = () => {
   return {
     earlyAdopter: {
-      name: "Early Adopter",
-      description: "First 5 numbers marked correctly",
+      name: "Early Five",
+      description: "First to reach 50 points",
       icon: "⚡",
-      priority: 1
+      priority: 1,
+      points: 50
     },
     gasSaver: {
-      name: "Gas Saver", 
-      description: "First row complete (1-10)",
-      icon: "⛽",
-      priority: 2
-    },
-    cornerNodes: {
-      name: "Corner Nodes",
-      description: "All 4 corners marked (1, 10, 41, 50)",
-      icon: "📐",
-      priority: 3
-    },
-    minerOfDay: {
-      name: "Miner of the Day",
-      description: "Any 2 complete rows",
-      icon: "⛏️",
-      priority: 4
+      name: "Any Row", 
+      description: "Complete any row in your ticket",
+      icon: "🎯",
+      priority: 2,
+      points: 100
     },
     fullBlockchain: {
-      name: "Full Blockchain",
-      description: "All 50 numbers marked correctly",
+      name: "Full House",
+      description: "All 15 numbers in your ticket completed",
       icon: "🏆",
-      priority: 5
+      priority: 3,
+      points: 200
     }
   }
 }
 
 /**
- * Get progress towards each winning condition
+ * Get progress towards each winning condition based on player's ticket and score
  * @param {Set} correctNumbers - Set of correctly answered numbers
+ * @param {Array} playerTicket - Player's 3x5 ticket array
+ * @param {Set} incorrectNumbers - Set of incorrectly answered numbers
+ * @param {number} playerScore - Player's current score
  * @returns {Object} - Progress information for each condition
  */
-export const getWinProgress = (correctNumbers) => {
+export const getWinProgress = (correctNumbers, playerTicket = [], incorrectNumbers = new Set(), playerScore = 0) => {
   const progress = {}
+  const ticketNumbers = playerTicket.flat()
   
-  // Early Adopter progress
+  // Early Five progress - based on score, not ticket numbers
   progress.earlyAdopter = {
-    current: correctNumbers.size,
-    target: 5,
-    percentage: Math.min((correctNumbers.size / 5) * 100, 100)
+    current: playerScore,
+    target: 50,
+    percentage: Math.min((playerScore / 50) * 100, 100),
+    pointsToGo: Math.max(50 - playerScore, 0)
   }
   
-  // Gas Saver progress
-  const firstRowNumbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-  const firstRowComplete = firstRowNumbers.filter(num => correctNumbers.has(num)).length
-  progress.gasSaver = {
-    current: firstRowComplete,
-    target: 10,
-    percentage: (firstRowComplete / 10) * 100
-  }
+  // Any Row progress - check each row and show best progress
+  const rows = playerTicket || []
+  let bestRowProgress = 0
+  let bestRowIndex = -1
   
-  // Corner Nodes progress
-  const corners = [1, 10, 41, 50]
-  const cornersComplete = corners.filter(num => correctNumbers.has(num)).length
-  progress.cornerNodes = {
-    current: cornersComplete,
-    target: 4,
-    percentage: (cornersComplete / 4) * 100
-  }
-  
-  // Miner of the Day progress
-  const rows = [
-    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-    [11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
-    [21, 22, 23, 24, 25, 26, 27, 28, 29, 30],
-    [31, 32, 33, 34, 35, 36, 37, 38, 39, 40],
-    [41, 42, 43, 44, 45, 46, 47, 48, 49, 50]
-  ]
-  
-  let completedRows = 0
-  for (const row of rows) {
-    if (row.every(num => correctNumbers.has(num))) {
-      completedRows++
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i] || []
+    const hasIncorrectInRow = row.some(num => incorrectNumbers.has(num))
+    if (!hasIncorrectInRow) {
+      const rowCorrect = row.filter(num => correctNumbers.has(num)).length
+      if (rowCorrect > bestRowProgress) {
+        bestRowProgress = rowCorrect
+        bestRowIndex = i
+      }
     }
   }
-  progress.minerOfDay = {
-    current: completedRows,
-    target: 2,
-    percentage: Math.min((completedRows / 2) * 100, 100)
+  
+  progress.gasSaver = {
+    current: bestRowProgress,
+    target: 5,
+    percentage: (bestRowProgress / 5) * 100,
+    numbersToGo: Math.max(5 - bestRowProgress, 0),
+    bestRow: bestRowIndex + 1
   }
   
-  // Full Blockchain progress
+  // Full House progress
+  const correctTicketNumbers = ticketNumbers.filter(num => correctNumbers.has(num))
   progress.fullBlockchain = {
-    current: correctNumbers.size,
-    target: 50,
-    percentage: (correctNumbers.size / 50) * 100
+    current: correctTicketNumbers.length,
+    target: 15,
+    percentage: (correctTicketNumbers.length / 15) * 100,
+    numbersToGo: Math.max(15 - correctTicketNumbers.length, 0)
   }
   
   return progress

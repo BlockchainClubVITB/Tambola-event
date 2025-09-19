@@ -6,6 +6,7 @@ const PlayerTicket = ({
   calledNumbers, 
   markedNumbers, 
   correctlyAnsweredNumbers = new Set(),
+  incorrectlyAnsweredNumbers = new Set(),
   onNumberMark, 
   onClaimWin 
 }) => {
@@ -13,10 +14,15 @@ const PlayerTicket = ({
   const isNumberCalled = (number) => calledNumbers.includes(number);
   const isNumberMarked = (number) => markedNumbers.has(number);
   const isNumberCorrectlyAnswered = (number) => correctlyAnsweredNumbers.has(number);
+  const isNumberIncorrectlyAnswered = (number) => incorrectlyAnsweredNumbers.has(number);
   
   const getNumberClass = (number) => {
     if (!number) return 'bg-slate-900/50 border-transparent'; // Empty slot in the ticket
 
+    // Priority: Incorrect (red) > Correct (green) > Called (blue) > Default
+    if (isNumberIncorrectlyAnswered(number)) {
+      return 'bg-red-600 text-white border-red-400 shadow-lg';
+    }
     if (isNumberCorrectlyAnswered(number)) {
       return 'bg-green-600 text-white border-green-400 shadow-lg';
     }
@@ -78,6 +84,8 @@ const PlayerTicket = ({
             >
               {isNumberCorrectlyAnswered(number) ? (
                   <CheckCircle className="w-4 h-4 text-white" />
+              ) : isNumberIncorrectlyAnswered(number) ? (
+                  <span className="text-xl">✕</span>
               ) : (
                 number || ''
               )}
@@ -87,7 +95,8 @@ const PlayerTicket = ({
       </div>
 
       <div className="text-center mt-4 text-xs text-slate-500">
-        Click on pulsing numbers to mark them. Correct answers are marked automatically.
+        <div>🟢 Correct • 🔴 Incorrect • 🔵 Marked • ⚪ Called • ⚫ Pending</div>
+        <div className="mt-1">Click on pulsing numbers to mark them.</div>
       </div>
     </div>
   );

@@ -4,10 +4,9 @@ import toast, { Toaster } from 'react-hot-toast'
 import CompleteBoard from '../components/CompleteBoard'
 import Leaderboard from '../components/Leaderboard'
 import WinnerPanel from '../components/WinnerPanel'
-import WinnersPanel from '../components/WinnersPanel'
 import QuestionRound from '../components/QuestionRound'
 import { gameService } from '../utils/gameService'
-import { getWinConditionInfo } from '../utils/winningConditions'
+import { getWinConditionInfo, checkAllWinningConditions } from '../utils/winningConditions'
 import { Share2, Users, Settings, Download, Play, Pause, RotateCcw, Clock, ArrowLeft, Trophy, CheckCircle, QrCode } from 'lucide-react'
 
 const HostDashboard = () => {
@@ -38,6 +37,10 @@ const HostDashboard = () => {
   const [loadingWinners, setLoadingWinners] = useState(false)
   const [winnersLastUpdate, setWinnersLastUpdate] = useState(null)
   const winnersPerPage = 10
+
+  // Verification State
+  const [pendingVerifications, setPendingVerifications] = useState([])
+  const [loadingVerifications, setLoadingVerifications] = useState(false)
 
   // Polling interval
   const pollIntervalRef = useRef(null)
@@ -81,6 +84,64 @@ const HostDashboard = () => {
       console.error('Error refreshing winners:', error)
     } finally {
       setLoadingWinners(false)
+    }
+  }
+
+  const refreshVerificationRequests = async () => {
+    if (!gameId) return
+    
+    setLoadingVerifications(true)
+    try {
+      const result = await gameService.getPendingVerificationRequests(gameId)
+      if (result.success) {
+        setPendingVerifications(result.requests)
+        console.log('📝 Verification requests refreshed:', result.requests)
+      } else {
+        if (result.fallback) {
+          console.log('📝 Verification system not available, no pending requests')
+          setPendingVerifications([])
+        } else {
+          console.error('Failed to refresh verification requests:', result.error)
+        }
+      }
+    } catch (error) {
+      console.error('Error refreshing verification requests:', error)
+      setPendingVerifications([])
+    } finally {
+      setLoadingVerifications(false)
+    }
+  }
+
+  const handleVerificationDecision = async (verificationId, decision, reason = null) => {
+    try {
+      const result = await gameService.updateVerificationRequest(
+        verificationId, 
+        decision, 
+        hostName, // Using hostName as hostId
+        reason
+      )
+      
+      if (result.success) {
+        console.log(`✅ Verification ${decision}:`, result.verificationRequest)
+        // Refresh both verification requests and winners data
+        await Promise.all([
+          refreshVerificationRequests(),
+          refreshWinnersData()
+        ])
+      } else {
+        if (result.fallback) {
+          console.log('📝 Verification system not available, using fallback')
+          // If this was an approval and we have fallback, try to declare winner directly
+          if (decision === 'approved') {
+            // We need to extract player and condition info from somewhere
+            console.log('⚠️ Cannot complete verification without verification system')
+          }
+        } else {
+          console.error(`Failed to ${decision} verification:`, result.error)
+        }
+      }
+    } catch (error) {
+      console.error(`Error ${decision} verification:`, error)
     }
   }
 
@@ -196,6 +257,9 @@ const HostDashboard = () => {
         // Single request for all winners
         const winnersResult = await gameService.getAllWinners(gameId)
         
+        // Single request for pending verification requests
+        const verificationsResult = await gameService.getPendingVerificationRequests(gameId)
+        
         // Process results
         if (leaderboardResult.success) {
           setLeaderboard(leaderboardResult.players)
@@ -210,18 +274,19 @@ const HostDashboard = () => {
         }
         
         if (winnersResult.success) {
-          // Flatten all winners into single array for pagination
-          const flatWinners = []
-          Object.entries(winnersResult.winners).forEach(([condition, winners]) => {
-            winners.forEach(winner => {
-              flatWinners.push({
-                ...winner,
-                winCondition: condition,
-                correctCount: winner.correctNumbers?.length || 0
-              })
-            })
-          })
-          setAllWinners(flatWinners)
+          // Keep the original object structure with condition keys
+          setAllWinners(winnersResult.winners)
+          setWinnersLastUpdate(new Date())
+          console.log('🏆 Winners data refreshed:', winnersResult.winners)
+        } else {
+          console.error('Failed to refresh winners in refreshAllData:', winnersResult.error)
+        }
+
+        if (verificationsResult.success) {
+          setPendingVerifications(verificationsResult.requests)
+          console.log('📝 Verification requests refreshed:', verificationsResult.requests)
+        } else {
+          console.error('Failed to refresh verification requests:', verificationsResult.error)
         }
         
         // Update cache
@@ -233,6 +298,11 @@ const HostDashboard = () => {
         })
         
         console.log('✅ Data refreshed and cached')
+        
+        // Run automatic win detection after refreshing leaderboard
+        if (gameState === 'active') {
+          setTimeout(() => autoDetectWins(), 500) // Small delay to ensure state is updated
+        }
       } else {
         console.log('📋 No changes detected, using existing data')
         if (showToast) toast.success('Data is up to date!')
@@ -255,6 +325,75 @@ const HostDashboard = () => {
       }, 5000) // Increased retry delay
       
       return false
+    }
+  }
+
+  // Auto-detect wins for all players based on their tickets and scores
+  const autoDetectWins = async () => {
+    if (!gameId || !leaderboard || leaderboard.length === 0) return
+
+    console.log('🔍 Starting automatic win detection...')
+    
+    try {
+      let anyWinsDetected = false
+      
+      for (const player of leaderboard) {
+        if (!player.ticket || !Array.isArray(player.ticket) || player.ticket.length === 0) {
+          continue // Skip players without valid tickets
+        }
+
+        // Get player's current win status from database
+        const currentWins = {
+          earlyAdopter: player.earlyAdopter || false,
+          gasSaver: player.gasSaver || false, 
+          fullBlockchain: player.fullBlockchain || false
+        }
+
+        // Check for new wins using the score-based Early Five logic
+        const correctNumbers = new Set(selectedNumbers)
+        const incorrectNumbers = new Set() // Will need to implement tracking incorrect answers
+        const playerScore = player.score || 0
+
+        const newWins = checkAllWinningConditions(
+          correctNumbers,
+          currentWins,
+          player.ticket,
+          incorrectNumbers,
+          playerScore
+        )
+
+        // If new wins detected, update the database
+        if (Object.keys(newWins).length > 0) {
+          console.log(`🎉 Auto-detected new wins for ${player.name}:`, newWins)
+          
+          // Update player in database with new wins
+          const updateData = { ...newWins }
+          
+          // Calculate points for new wins
+          const winConditionInfo = getWinConditionInfo()
+          Object.keys(newWins).forEach(condition => {
+            const points = winConditionInfo[condition]?.points || 0
+            updateData.score = (player.score || 0) + points
+          })
+
+          const result = await gameService.updatePlayerWins(gameId, player.id, updateData)
+          
+          if (result.success) {
+            anyWinsDetected = true
+            toast.success(`🎉 ${player.name} automatically won ${Object.keys(newWins).map(w => winConditionInfo[w]?.name).join(', ')}!`)
+          } else {
+            console.error('Failed to update auto-detected wins:', result.error)
+          }
+        }
+      }
+
+      if (anyWinsDetected) {
+        // Refresh leaderboard to show updated wins and scores
+        setTimeout(() => refreshAllData(false, true), 1000)
+      }
+
+    } catch (error) {
+      console.error('Error in automatic win detection:', error)
     }
   }
 
@@ -360,6 +499,8 @@ const HostDashboard = () => {
     // Smart refresh - only fetch if significant time has passed or force needed
     setTimeout(() => {
       refreshAllData(false, false) // Silent refresh, will use cache if recent
+      // Run auto-detection after the refresh to check for new wins
+      setTimeout(() => autoDetectWins(), 1000) 
     }, 2000) // Small delay to ensure all players have submitted
     
     // Clear current number display
@@ -735,7 +876,9 @@ const HostDashboard = () => {
               <div className="space-y-4">
                 {Object.entries(getWinConditionInfo()).map(([condition, info]) => {
                   const conditionWinners = allWinners[condition] || []
+                  const conditionPending = pendingVerifications.filter(req => req.conditionId === condition)
                   const hasWinners = conditionWinners.length > 0
+                  const hasPending = conditionPending.length > 0
 
                   return (
                     <div
@@ -743,6 +886,8 @@ const HostDashboard = () => {
                       className={`p-4 rounded-lg border transition-all ${
                         hasWinners 
                           ? 'bg-green-900/30 border-green-600/50' 
+                          : hasPending
+                          ? 'bg-yellow-900/30 border-yellow-600/50'
                           : 'bg-gray-800/50 border-gray-700'
                       }`}
                     >
@@ -756,20 +901,71 @@ const HostDashboard = () => {
                         </div>
                         
                         <div className="text-right">
-                          <div className={`text-lg font-bold ${
-                            hasWinners ? 'text-green-400' : 'text-gray-500'
-                          }`}>
-                            {conditionWinners.length}
-                          </div>
-                          <div className="text-xs text-gray-400">
-                            {conditionWinners.length === 1 ? 'Winner' : 'Winners'}
+                          <div className="flex items-center gap-2">
+                            <div className={`text-lg font-bold ${
+                              hasWinners ? 'text-green-400' : 'text-gray-500'
+                            }`}>
+                              {conditionWinners.length}
+                            </div>
+                            <div className="text-xs text-gray-400">
+                              {conditionWinners.length === 1 ? 'Winner' : 'Winners'}
+                            </div>
+                            {hasPending && (
+                              <div className="ml-2 px-2 py-1 text-xs font-bold bg-yellow-600 text-black rounded">
+                                {conditionPending.length} Pending
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
 
+                      {/* Pending Verification Requests */}
+                      {hasPending && (
+                        <div className="mb-4">
+                          <h5 className="mb-2 text-sm font-semibold text-yellow-400">Pending Verification:</h5>
+                          <div className="space-y-2">
+                            {conditionPending.map((request) => {
+                              // Find player details from leaderboard
+                              const player = leaderboard.find(p => p.$id === request.playerId)
+                              return (
+                                <div 
+                                  key={request.verificationId}
+                                  className="flex items-center justify-between p-3 rounded bg-yellow-900/50 border border-yellow-600/30"
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-yellow-600 text-black">
+                                      ?
+                                    </div>
+                                    <span className="font-medium text-white">{player?.name || 'Unknown Player'}</span>
+                                    <span className="text-sm text-gray-400">({player?.regNo || 'N/A'})</span>
+                                    <span className="text-sm text-yellow-400">{player?.score || 0} pts</span>
+                                  </div>
+                                  
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      onClick={() => handleVerificationDecision(request.verificationId, 'approved')}
+                                      className="px-3 py-1 text-xs font-bold bg-green-600 hover:bg-green-700 text-white rounded transition-colors"
+                                    >
+                                      ✓ Verify & Award
+                                    </button>
+                                    <button
+                                      onClick={() => handleVerificationDecision(request.verificationId, 'rejected', 'Host decision')}
+                                      className="px-3 py-1 text-xs font-bold bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
+                                    >
+                                      ✗ Reject
+                                    </button>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
+
                       {/* Winner List */}
                       {hasWinners && (
                         <div className="space-y-2">
+                          <h5 className="text-sm font-semibold text-green-400">Verified Winners:</h5>
                           {conditionWinners.slice(0, 5).map((winner, index) => (
                             <div 
                               key={winner.$id}
@@ -818,10 +1014,10 @@ const HostDashboard = () => {
                         </div>
                       )}
 
-                      {/* No Winners State */}
-                      {!hasWinners && (
-                        <div className="py-2 text-sm text-center text-gray-500">
-                          No winners yet
+                      {/* Empty State */}
+                      {!hasWinners && !hasPending && (
+                        <div className="py-4 text-center text-gray-500">
+                          <p className="text-sm">No winners yet</p>
                         </div>
                       )}
                     </div>
@@ -833,6 +1029,7 @@ const HostDashboard = () => {
 
           {/* Right Column - Leaderboard */}
           <div className="space-y-6 transition-all duration-500 ease-out delay-150 transform opacity-0 animate-fade-in-up">
+            {/* Leaderboard */}
             <div>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-white">Leaderboard</h3>

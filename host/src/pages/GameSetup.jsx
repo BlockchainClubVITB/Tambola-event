@@ -265,7 +265,7 @@ const GameSetup = () => {
             <div className="p-4 bg-gray-800 border border-gray-700 rounded-lg">
               <h3 className="mb-2 font-semibold">Game Rules:</h3>
               <ul className="space-y-1 text-sm text-gray-300">
-                <li>• Each round: 5s preparation + 30s active + 5s scoring</li>
+                <li>• Each round: 5s preparation + 15s active + 5s scoring</li>
                 <li>• Players get +10 points for correct answers</li>
                 <li>• Real-time leaderboard updates</li>
                 <li>• Numbers are locked once selected</li>

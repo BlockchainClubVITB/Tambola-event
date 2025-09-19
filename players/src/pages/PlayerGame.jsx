@@ -52,6 +52,10 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
   const [showRulesPopup, setShowRulesPopup] = useState(false) // Track rules popup visibility
   const [playerScore, setPlayerScore] = useState(0) // Track player's current score
   const [playerPosition, setPlayerPosition] = useState(null) // Track player's leaderboard position
+  
+  // Verification State
+  const [lockedConditions, setLockedConditions] = useState(new Set()) // Conditions locked by other players
+  const [verificationStatus, setVerificationStatus] = useState({}) // Player's verification requests status
   const questionTimerRef = useRef(null)
   const hasShownRestorationRef = useRef(false) // Track if we've shown restoration message
   const gameSubscriptionRef = useRef(null) // Store real-time subscription
@@ -118,6 +122,7 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
     // Single initial fetch only - no continuous polling
     fetchGameState()
     fetchPlayerScoreAndPosition() // Fetch initial score and position
+    checkVerificationStatus() // Check initial verification status and locked conditions
     
     // Set up real-time subscription for host events
     setupRealTimeSubscription()
@@ -269,7 +274,7 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
         setSelectedAnswer(null)
         setHasAnswered(false)
         setShowQuestionRound(true)
-        startQuestionWorkflow() // Synchronized 5s+30s+5s workflow
+        startQuestionWorkflow() // Synchronized 5s+15s+5s workflow
         toast.success(`Number ${newNumber} called!`, { duration: 2000 })
       } else {
         // No question available for this number
@@ -351,6 +356,34 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
     }
   }
 
+  // Check for locked conditions and verification status
+  const checkVerificationStatus = async () => {
+    if (!playerData) return
+    
+    try {
+      // Check for approved verification requests (locked conditions)
+      const approvedResult = await gameService.getPendingVerificationRequests(gameId)
+      if (approvedResult.success) {
+        const approvedConditions = new Set()
+        approvedResult.requests.forEach(request => {
+          if (request.status === 'approved') {
+            approvedConditions.add(request.conditionId)
+          }
+        })
+        setLockedConditions(approvedConditions)
+      }
+
+      // Get player's own verification status
+      const statusResult = await gameService.getPlayerVerificationStatus(gameId, playerData.$id)
+      if (statusResult.success) {
+        setVerificationStatus(statusResult.verificationStatus)
+        console.log('📝 Verification status updated:', statusResult.verificationStatus)
+      }
+    } catch (error) {
+      console.error('Failed to check verification status:', error)
+    }
+  }
+
   const startQuestionWorkflow = () => {
     console.log('🎯 Starting synchronized question workflow - Phase 1: Preparation (5s)')
     // Phase 1: Exactly 5 seconds preparation (synchronized with host)
@@ -362,14 +395,14 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
       clearInterval(questionTimerRef.current)
     }
     
-    // Safety timeout to prevent stuck states (total workflow should be 40s max)
+    // Safety timeout to prevent stuck states (total workflow should be 25s max)
     setTimeout(() => {
       if (isQuestionActive) {
         console.warn('⚠️ Question workflow timeout, resetting state')
         setIsQuestionActive(false)
         setShowQuestionRound(false)
       }
-    }, 45000) // 45 seconds safety timeout
+    }, 30000) // 30 seconds safety timeout
     
     let timeLeft = 5
     const prepTimer = setInterval(() => {
@@ -387,12 +420,12 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
   }
 
   const startQuestionPhase = () => {
-    console.log('❓ Starting question phase (30s) - synchronized with host')
-    // Phase 2: Exactly 30 seconds question (synchronized with host)
+    console.log('❓ Starting question phase (15s) - synchronized with host')
+    // Phase 2: Exactly 15 seconds question (synchronized with host)
     setQuestionPhase('question')
-    setQuestionTimer(30)
+    setQuestionTimer(15)
     
-    let timeLeft = 30
+    let timeLeft = 15
     const questionTimer = setInterval(() => {
       timeLeft--
       setQuestionTimer(timeLeft)
@@ -474,8 +507,11 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
       const newCorrectNumbers = new Set([...correctlyAnsweredNumbers, questionData.id])
       setCorrectlyAnsweredNumbers(newCorrectNumbers)
       
-      // Check for winning conditions and get new wins
-      const newWins = await checkWinningConditions(newCorrectNumbers)
+      // Calculate the new score for winning condition checks
+      const expectedNewScore = playerScore + 10
+      
+      // Check for winning conditions with the expected new score
+      const newWins = await checkWinningConditionsWithScore(newCorrectNumbers, expectedNewScore)
       
       toast.success('✅ Correct! +10 pts', { duration: 2000 })
       
@@ -506,7 +542,24 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
                 setPlayerScore(result.newScore)
               }
               
-              // Update local state with only the wins that were actually awarded
+              // Handle verification requests instead of direct wins
+              if (result.verificationRequests && result.verificationRequests.length > 0) {
+                const winInfo = getWinConditionInfo()
+                for (const request of result.verificationRequests) {
+                  const info = winInfo[request.condition]
+                  toast.success(`📝 ${info.icon} ${info.name} submitted for verification!`, {
+                    duration: 4000,
+                    style: {
+                      background: '#0891b2',
+                      color: 'white',
+                      fontWeight: 'bold'
+                    }
+                  })
+                }
+                console.log('📝 Verification requests submitted:', result.verificationRequests)
+              }
+              
+              // Update local state with only the wins that were actually awarded (approved by host)
               if (result.newWins && Object.keys(result.newWins).length > 0) {
                 setPlayerWins(prev => ({ ...prev, ...result.newWins }))
                 
@@ -515,7 +568,7 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
                 for (const [condition, won] of Object.entries(result.newWins)) {
                   if (won) {
                     const info = winInfo[condition]
-                    toast.success(`🏆 ${info.icon} ${info.name}!`, {
+                    toast.success(`🏆 ${info.icon} ${info.name} VERIFIED!`, {
                       duration: 5000,
                       style: {
                         background: '#059669',
@@ -571,16 +624,21 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
 
   // Check winning conditions after each correct answer (with local caching)
   const checkWinningConditions = async (correctNumbers) => {
+    return await checkWinningConditionsWithScore(correctNumbers, playerScore)
+  }
+
+  // Check winning conditions with a specific score (used when score changes)
+  const checkWinningConditionsWithScore = async (correctNumbers, scoreToUse) => {
     try {
       // LOCAL CHECK FIRST - avoid redundant database calls
-      // Pass incorrectlyAnsweredNumbers to support blocking logic
-      const newWins = checkAllWinningConditions(correctNumbers, playerWins, incorrectlyAnsweredNumbers)
+      // Pass incorrectlyAnsweredNumbers, playerTicket, and scoreToUse to support all winning logic
+      const newWins = checkAllWinningConditions(correctNumbers, playerWins, playerTicket, incorrectlyAnsweredNumbers, scoreToUse)
       
       if (Object.keys(newWins).length > 0) {
         console.log('🏆 Potential winning conditions achieved:', newWins)
         
         // Check if any conditions are blocked
-        const blockedConditions = getBlockedConditions(incorrectlyAnsweredNumbers)
+        const blockedConditions = getBlockedConditions(incorrectlyAnsweredNumbers, playerTicket)
         
         // Filter out any wins that are blocked
         const validWins = {}
@@ -652,145 +710,120 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
     }
   }
 
-  const handleClaimWin = async (pattern) => {
-    if (!playerData || !currentRound) {
-      alert('Unable to claim win at this time')
-      return
-    }
-
-    try {
-      // Submit answer to Appwrite
-      const result = await gameService.submitAnswer(
-        currentRound.$id,
-        playerData.id,
-        true // claiming win
-      )
-
-      if (result.success) {
-        alert(`Win claimed for ${pattern}! Waiting for host verification...`)
-        setWins(prev => [...prev, { pattern, time: new Date() }])
-      } else {
-        alert(result.error || 'Failed to claim win')
-      }
-    } catch (error) {
-      console.error('Failed to claim win:', error)
-      alert('Failed to claim win. Please try again.')
-    }
-  }
-
   const handleLeaveGame = () => {
     if (confirm('Are you sure you want to leave the game?')) {
       navigate('/')
     }
   }
 
-  // Calculate progress for each winning condition
+  // Calculate progress for each winning condition based on player's ticket and score  
   const calculateWinningProgress = () => {
-    const correctNumbers = Array.from(correctlyAnsweredNumbers)
-    const incorrectNumbers = Array.from(incorrectlyAnsweredNumbers)
-    
-    // Debug logging
-    console.log('🔍 calculateWinningProgress called:', {
-      correctCount: correctNumbers.length,
-      incorrectCount: incorrectNumbers.length,
-      incorrectNumbers: incorrectNumbers
-    })
-    
-    // Get blocked conditions
-    const blockedConditions = getBlockedConditions(incorrectlyAnsweredNumbers)
-    console.log('🚫 Blocked conditions:', blockedConditions)
-    
-    // Test blocking scenarios for debugging
-    if (incorrectNumbers.length > 0) {
-      console.log('🧪 Testing blocking scenarios:')
-      if (incorrectNumbers.some(num => num >= 1 && num <= 5)) {
-        console.log('  ❌ Early Adopter should be blocked (incorrect in 1-5)')
-      }
-      if (incorrectNumbers.filter(num => num >= 1 && num <= 10).length >= 4) {
-        console.log('  ❌ Gas Saver should be blocked (4+ incorrect in 1-10)')
-      }
-      if (incorrectNumbers.some(num => [1, 10, 41, 50].includes(num))) {
-        console.log('  ❌ Corner Nodes should be blocked (corner incorrect)')
-      }
-      if (incorrectNumbers.length >= 10) {
-        console.log('  ❌ Full Blockchain should be blocked (10+ incorrect)')
+    if (!playerTicket || playerTicket.length === 0) {
+      // Return empty progress if no ticket - use database column names as keys
+      return {
+        earlyAdopter: { 
+          current: 0, 
+          total: 50, 
+          blocked: lockedConditions.has('earlyAdopter'), 
+          status: lockedConditions.has('earlyAdopter') ? 'locked' : 'active', 
+          reason: lockedConditions.has('earlyAdopter') ? 'Another player has been verified for this condition' : null, 
+          pointsToGo: 50 
+        },
+        gasSaver: { 
+          current: 0, 
+          total: 5, 
+          blocked: lockedConditions.has('gasSaver'), 
+          status: lockedConditions.has('gasSaver') ? 'locked' : 'active', 
+          reason: lockedConditions.has('gasSaver') ? 'Another player has been verified for this condition' : null, 
+          numbersToGo: 5 
+        },
+        fullBlockchain: { 
+          current: 0, 
+          total: 15, 
+          blocked: lockedConditions.has('fullBlockchain'), 
+          status: lockedConditions.has('fullBlockchain') ? 'locked' : 'active', 
+          reason: lockedConditions.has('fullBlockchain') ? 'Another player has been verified for this condition' : null, 
+          numbersToGo: 15 
+        }
       }
     }
+
+    // Use the new logic from winningConditions.js
+    const correctNumbers = new Set(correctlyAnsweredNumbers)
+    const progress = checkAllWinningConditions(
+      correctNumbers,
+      playerWins, // Current wins from state  
+      playerTicket,
+      incorrectlyAnsweredNumbers,
+      playerScore
+    )
     
-    // Early Adopter - first 5 questions must ALL be correct (1-5), if any wrong from 1-5, permanently blocked
-    const firstFiveQuestions = [1, 2, 3, 4, 5]
-    const hasIncorrectInFirstFive = firstFiveQuestions.some(num => incorrectNumbers.includes(num))
+    const blockedConditions = getBlockedConditions(incorrectlyAnsweredNumbers, playerTicket)
     
-    let earlyAdopterProgress = 0
-    let earlyAdopterBlocked = blockedConditions.earlyAdopter?.blocked || false
-    
-    if (earlyAdopterBlocked) {
-      // Permanently blocked - any wrong answer in first 5 questions
-      earlyAdopterProgress = 0
-    } else {
-      // Count correct answers from first 5 questions only
-      earlyAdopterProgress = firstFiveQuestions.filter(num => correctNumbers.includes(num)).length
-    }
-    
-    // Gas Saver - First Row (1-10)
-    const firstRowNumbers = correctNumbers.filter(num => num >= 1 && num <= 10)
-    const gasSaverProgress = firstRowNumbers.length
-    
-    // Corner Nodes - 4 Corners (1,10,41,50)
-    const cornerNumbers = [1, 10, 41, 50]
-    const cornerProgress = cornerNumbers.filter(num => correctNumbers.includes(num)).length
-    
-    // Miner of the Day - Complete 2 rows
-    const rows = [
-      [1,2,3,4,5,6,7,8,9,10],
-      [11,12,13,14,15,16,17,18,19,20],
-      [21,22,23,24,25,26,27,28,29,30],
-      [31,32,33,34,35,36,37,38,39,40],
-      [41,42,43,44,45,46,47,48,49,50]
-    ]
-    const completedRows = rows.filter(row => 
-      row.every(num => correctNumbers.includes(num))
-    ).length
-    
-    // Full Blockchain - all 50 numbers
-    const fullBlockchainProgress = correctNumbers.length
-    
+    // Convert to UI format with database column names  
     return {
-      earlyAdopter: { 
-        current: earlyAdopterProgress, 
-        total: 5, 
-        blocked: earlyAdopterBlocked,
-        status: earlyAdopterBlocked ? 'blocked' : (earlyAdopterProgress === 5 ? 'completed' : 'active'),
-        reason: blockedConditions.earlyAdopter?.reason || null
-      },
-      gasSaver: { 
-        current: gasSaverProgress, 
-        total: 10,
-        blocked: blockedConditions.gasSaver?.blocked || false,
-        status: blockedConditions.gasSaver?.blocked ? 'blocked' : (gasSaverProgress === 10 ? 'completed' : 'active'),
-        reason: blockedConditions.gasSaver?.reason || null
-      },
-      cornerNodes: { 
-        current: cornerProgress, 
-        total: 4,
-        blocked: blockedConditions.cornerNodes?.blocked || false,
-        status: blockedConditions.cornerNodes?.blocked ? 'blocked' : (cornerProgress === 4 ? 'completed' : 'active'),
-        reason: blockedConditions.cornerNodes?.reason || null
-      },
-      minerOfTheDay: { 
-        current: completedRows, 
-        total: 2,
-        blocked: blockedConditions.minerOfTheDay?.blocked || false,
-        status: blockedConditions.minerOfTheDay?.blocked ? 'blocked' : (completedRows === 2 ? 'completed' : 'active'),
-        reason: blockedConditions.minerOfTheDay?.reason || null
-      },
-      fullBlockchain: { 
-        current: fullBlockchainProgress, 
+      // Early Five -> earlyAdopter (score-based, 50 points)
+      earlyAdopter: {
+        current: playerScore,
         total: 50,
-        blocked: blockedConditions.fullBlockchain?.blocked || false,
-        status: blockedConditions.fullBlockchain?.blocked ? 'blocked' : (fullBlockchainProgress === 50 ? 'completed' : 'active'),
-        reason: blockedConditions.fullBlockchain?.reason || null
-      }
+        blocked: blockedConditions.earlyAdopter?.blocked || lockedConditions.has('earlyAdopter'),
+        status: lockedConditions.has('earlyAdopter') ? 'locked' : 
+                (blockedConditions.earlyAdopter?.blocked ? 'blocked' : 
+                (playerScore >= 50 ? 'completed' : 'active')),
+        reason: lockedConditions.has('earlyAdopter') ? 'Another player has been verified for this condition' :
+                (blockedConditions.earlyAdopter?.reason || null),
+        pointsToGo: Math.max(50 - playerScore, 0)
+      },
+      
+      // Any Row -> gasSaver
+      gasSaver: (() => {
+        const rows = playerTicket || []
+        let bestRowProgress = 0
+        let bestRowIndex = -1
+        
+        for (let i = 0; i < rows.length; i++) {
+          const row = rows[i] || []
+          const hasIncorrectInRow = row.some(num => incorrectlyAnsweredNumbers.has(num))
+          if (!hasIncorrectInRow) {
+            const rowCorrect = row.filter(num => correctNumbers.has(num)).length
+            if (rowCorrect > bestRowProgress) {
+              bestRowProgress = rowCorrect
+              bestRowIndex = i
+            }
+          }
+        }
+        
+        return {
+          current: bestRowProgress,
+          total: 5,
+          blocked: blockedConditions.gasSaver?.blocked || lockedConditions.has('gasSaver'),
+          status: lockedConditions.has('gasSaver') ? 'locked' : 
+                  (blockedConditions.gasSaver?.blocked ? 'blocked' : 
+                  (bestRowProgress === 5 ? 'completed' : 'active')),
+          reason: lockedConditions.has('gasSaver') ? 'Another player has been verified for this condition' :
+                  (blockedConditions.gasSaver?.reason || null),
+          numbersToGo: Math.max(5 - bestRowProgress, 0),
+          bestRow: bestRowIndex + 1
+        }
+      })(),
+      
+      // Full House -> fullBlockchain  
+      fullBlockchain: (() => {
+        const ticketNumbers = playerTicket.flat()
+        const correctTicketNumbers = ticketNumbers.filter(num => correctNumbers.has(num))
+        
+        return {
+          current: correctTicketNumbers.length,
+          total: 15,
+          blocked: blockedConditions.fullBlockchain?.blocked || lockedConditions.has('fullBlockchain'), 
+          status: lockedConditions.has('fullBlockchain') ? 'locked' : 
+                  (blockedConditions.fullBlockchain?.blocked ? 'blocked' : 
+                  (correctTicketNumbers.length === 15 ? 'completed' : 'active')),
+          reason: lockedConditions.has('fullBlockchain') ? 'Another player has been verified for this condition' :
+                  (blockedConditions.fullBlockchain?.reason || null),
+          numbersToGo: Math.max(15 - correctTicketNumbers.length, 0)
+        }
+      })()
     }
   }
 
@@ -843,6 +876,7 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
         console.log('🔄 Auto-refresh triggered (real-time fallback)')
         listenForHostEvents()
         fetchPlayerScoreAndPosition() // Update score and position during auto-refresh
+        checkVerificationStatus() // Check for locked conditions and verification status
       }, 10000)
     }
 
@@ -1147,156 +1181,206 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
                   calledNumbers={calledNumbers}
                   markedNumbers={markedNumbers}
                   correctlyAnsweredNumbers={correctlyAnsweredNumbers}
+                  incorrectlyAnsweredNumbers={incorrectlyAnsweredNumbers}
                   onNumberMark={handleNumberMark}
-                  onClaimWin={handleClaimWin}
                 />
               </div>
             )}
 
             {/* Winning Conditions Progress */}
             <div className="p-4 mb-6 bg-gray-800 border border-gray-600 rounded-xl">
-              <h3 className="mb-4 font-mono font-semibold text-white">Winning Conditions Progress</h3>
+              <h3 className="mb-4 font-mono font-semibold text-white">Tambola Winning Conditions</h3>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {(() => {
                   const progress = calculateWinningProgress()
+                  const winConditionInfo = getWinConditionInfo()
+                  
                   return (
                     <>
-                      <div className={`p-3 bg-gray-700 rounded-lg border ${progress.earlyAdopter.blocked ? 'border-red-500 bg-red-900/20' : 'border-gray-600'}`}>
+                      {/* Early Five -> earlyAdopter */}
+                      <div className={`p-3 bg-gray-700 rounded-lg border ${
+                        progress.earlyAdopter?.status === 'locked' ? 'border-orange-500 bg-orange-900/20' :
+                        progress.earlyAdopter?.blocked ? 'border-red-500 bg-red-900/20' : 
+                        progress.earlyAdopter?.status === 'completed' ? 'border-yellow-500 bg-yellow-900/20' : 
+                        'border-gray-600'
+                      }`}>
                         <div className="flex items-center justify-between mb-2">
-                          <span className={`font-semibold text-sm ${progress.earlyAdopter.blocked ? 'text-red-400' : 'text-yellow-400'}`}>
-                            {progress.earlyAdopter.blocked ? '❌' : '⚡'} Early Adopter
+                          <span className={`font-semibold text-sm ${
+                            progress.earlyAdopter?.status === 'locked' ? 'text-orange-400' :
+                            progress.earlyAdopter?.blocked ? 'text-red-400' : 
+                            progress.earlyAdopter?.status === 'completed' ? 'text-yellow-300' : 
+                            'text-yellow-400'
+                          }`}>
+                            {progress.earlyAdopter?.status === 'locked' ? '🔒' :
+                             progress.earlyAdopter?.blocked ? '❌' : 
+                             progress.earlyAdopter?.status === 'completed' ? '🎉' : '⚡'} Early Five
+                            {progress.earlyAdopter?.status === 'completed' && <span className="ml-1 text-xs">COMPLETED!</span>}
+                            {progress.earlyAdopter?.status === 'locked' && <span className="ml-1 text-xs">LOCKED</span>}
                           </span>
                           <span className="text-xs text-gray-400">
-                            {progress.earlyAdopter.blocked ? 'BLOCKED' : `${progress.earlyAdopter.current}/${progress.earlyAdopter.total} numbers`}
+                            {progress.earlyAdopter?.status === 'locked' ? 'LOCKED' :
+                             progress.earlyAdopter?.blocked ? 'BLOCKED' : `${progress.earlyAdopter?.current || 0}/${progress.earlyAdopter?.total || 50} • 50 pts`}
                           </span>
                         </div>
                         <div className="w-full h-2 bg-gray-600 rounded-full">
                           <div 
                             className={`h-2 rounded-full transition-all duration-300 ${
-                              progress.earlyAdopter.blocked ? 'bg-red-500' : 'bg-yellow-400'
+                              progress.earlyAdopter?.blocked ? 'bg-red-500' : 
+                              progress.earlyAdopter?.status === 'completed' ? 'bg-yellow-300' : 
+                              'bg-yellow-400'
                             }`}
                             style={{ 
-                              width: progress.earlyAdopter.blocked ? '100%' : `${(progress.earlyAdopter.current / progress.earlyAdopter.total) * 100}%` 
+                              width: (progress.earlyAdopter?.blocked || progress.earlyAdopter?.status === 'locked') ? '100%' : `${Math.min(((progress.earlyAdopter?.current || 0) / (progress.earlyAdopter?.total || 50)) * 100, 100)}%` 
                             }}
                           ></div>
                         </div>
-                        {progress.earlyAdopter.blocked && (
+                        {progress.earlyAdopter?.status === 'locked' && (
+                          <div className="mt-1 text-xs text-orange-300">
+                            🔒 Locked - Another player has been verified for this condition
+                          </div>
+                        )}
+                        {progress.earlyAdopter?.blocked && progress.earlyAdopter?.status !== 'locked' && (
                           <div className="mt-1 text-xs text-red-300">
-                            {progress.earlyAdopter.reason || "Failed question 1-5. Cannot achieve Early Adopter."}
+                            {progress.earlyAdopter?.reason || "Cannot achieve Early Five."}
+                          </div>
+                        )}
+                        {!progress.earlyAdopter?.blocked && progress.earlyAdopter?.status !== 'locked' && progress.earlyAdopter?.pointsToGo > 0 && (
+                          <div className="mt-1 text-xs text-gray-400">
+                            {progress.earlyAdopter.pointsToGo} more points to go
+                          </div>
+                        )}
+                        {progress.earlyAdopter?.status === 'completed' && (
+                          <div className="mt-1 text-xs text-yellow-300">
+                            🎉 Early Five achieved! Waiting for host to verify...
                           </div>
                         )}
                       </div>
 
-                      <div className={`p-3 bg-gray-700 rounded-lg border ${progress.gasSaver.blocked ? 'border-red-500 bg-red-900/20' : 'border-gray-600'}`}>
+                      {/* Any Row -> gasSaver */}
+                      <div className={`p-3 bg-gray-700 rounded-lg border ${
+                        progress.gasSaver?.status === 'locked' ? 'border-orange-500 bg-orange-900/20' :
+                        progress.gasSaver?.blocked ? 'border-red-500 bg-red-900/20' : 
+                        progress.gasSaver?.status === 'completed' ? 'border-blue-500 bg-blue-900/20' : 
+                        'border-gray-600'
+                      }`}>
                         <div className="flex items-center justify-between mb-2">
-                          <span className={`text-sm font-semibold ${progress.gasSaver.blocked ? 'text-red-400' : 'text-blue-400'}`}>
-                            {progress.gasSaver.blocked ? '❌' : '⛽'} Gas Saver
+                          <span className={`text-sm font-semibold ${
+                            progress.gasSaver?.status === 'locked' ? 'text-orange-400' :
+                            progress.gasSaver?.blocked ? 'text-red-400' : 
+                            progress.gasSaver?.status === 'completed' ? 'text-blue-300' : 
+                            'text-blue-400'
+                          }`}>
+                            {progress.gasSaver?.status === 'locked' ? '🔒' :
+                             progress.gasSaver?.blocked ? '❌' : 
+                             progress.gasSaver?.status === 'completed' ? '🏁' : '🎯'} Any Row
+                            {progress.gasSaver?.status === 'completed' && <span className="ml-1 text-xs">COMPLETED!</span>}
+                            {progress.gasSaver?.status === 'locked' && <span className="ml-1 text-xs">LOCKED</span>}
                           </span>
                           <span className="text-xs text-gray-400">
-                            {progress.gasSaver.blocked ? 'BLOCKED' : 'First Row (1-10)'}
+                            {progress.gasSaver?.status === 'locked' ? 'LOCKED' :
+                             progress.gasSaver?.blocked ? 'BLOCKED' : `${progress.gasSaver?.current || 0}/${progress.gasSaver?.total || 5} • 100 pts`}
                           </span>
                         </div>
                         <div className="w-full h-2 bg-gray-600 rounded-full">
                           <div 
                             className={`h-2 transition-all duration-300 rounded-full ${
-                              progress.gasSaver.blocked ? 'bg-red-500' : 'bg-blue-400'
+                              progress.gasSaver?.status === 'locked' ? 'bg-orange-500' :
+                              progress.gasSaver?.blocked ? 'bg-red-500' : 
+                              progress.gasSaver?.status === 'completed' ? 'bg-blue-300' : 
+                              'bg-blue-400'
                             }`}
                             style={{ 
-                              width: progress.gasSaver.blocked ? '100%' : `${(progress.gasSaver.current / progress.gasSaver.total) * 100}%` 
+                              width: (progress.gasSaver?.blocked || progress.gasSaver?.status === 'locked') ? '100%' : `${Math.min(((progress.gasSaver?.current || 0) / (progress.gasSaver?.total || 5)) * 100, 100)}%` 
                             }}
                           ></div>
                         </div>
-                        {progress.gasSaver.blocked && progress.gasSaver.reason && (
+                        {progress.gasSaver?.status === 'locked' && (
+                          <div className="mt-1 text-xs text-orange-300">
+                            🔒 Locked - Another player has been verified for this condition
+                          </div>
+                        )}
+                        {progress.gasSaver?.blocked && progress.gasSaver?.status !== 'locked' && (
                           <div className="mt-1 text-xs text-red-300">
-                            {progress.gasSaver.reason}
+                            {progress.gasSaver?.reason || "Failed row numbers."}
+                          </div>
+                        )}
+                        {!progress.gasSaver?.blocked && progress.gasSaver?.status !== 'locked' && progress.gasSaver?.numbersToGo > 0 && (
+                          <div className="mt-1 text-xs text-gray-400">
+                            {progress.gasSaver.numbersToGo} more to go
+                            {progress.gasSaver.bestRow > 0 && ` (Row ${progress.gasSaver.bestRow} leading)`}
+                          </div>
+                        )}
+                        {progress.gasSaver?.status === 'completed' && (
+                          <div className="mt-1 text-xs text-blue-300">
+                            🎉 Any Row completed! Waiting for host to verify...
                           </div>
                         )}
                       </div>
 
-                      <div className={`p-3 bg-gray-700 rounded-lg border ${progress.cornerNodes.blocked ? 'border-red-500 bg-red-900/20' : 'border-gray-600'}`}>
+                      {/* Full House -> fullBlockchain */}
+                      <div className={`p-3 bg-gray-700 rounded-lg border sm:col-span-2 lg:col-span-1 ${
+                        progress.fullBlockchain?.status === 'locked' ? 'border-orange-500 bg-orange-900/20' :
+                        progress.fullBlockchain?.blocked ? 'border-red-500 bg-red-900/20' : 
+                        progress.fullBlockchain?.status === 'completed' ? 'border-green-500 bg-green-900/20' : 
+                        'border-gray-600'
+                      }`}>
                         <div className="flex items-center justify-between mb-2">
-                          <span className={`text-sm font-semibold ${progress.cornerNodes.blocked ? 'text-red-400' : 'text-purple-400'}`}>
-                            {progress.cornerNodes.blocked ? '❌' : '📐'} Corner Nodes
+                          <span className={`text-sm font-semibold ${
+                            progress.fullBlockchain?.status === 'locked' ? 'text-orange-400' :
+                            progress.fullBlockchain?.blocked ? 'text-red-400' : 
+                            progress.fullBlockchain?.status === 'completed' ? 'text-green-300' : 
+                            'text-green-400'
+                          }`}>
+                            {progress.fullBlockchain?.status === 'locked' ? '🔒' :
+                             progress.fullBlockchain?.blocked ? '❌' : 
+                             progress.fullBlockchain?.status === 'completed' ? '🎉' : '🏆'} Full House
+                            {progress.fullBlockchain?.status === 'completed' && <span className="ml-1 text-xs">COMPLETED!</span>}
+                            {progress.fullBlockchain?.status === 'locked' && <span className="ml-1 text-xs">LOCKED</span>}
                           </span>
                           <span className="text-xs text-gray-400">
-                            {progress.cornerNodes.blocked ? 'BLOCKED' : '4 Corners (1,10,41,50)'}
+                            {progress.fullBlockchain?.status === 'locked' ? 'LOCKED' :
+                             progress.fullBlockchain?.blocked ? 'BLOCKED' : `${progress.fullBlockchain?.current || 0}/${progress.fullBlockchain?.total || 15} • 200 pts`}
                           </span>
                         </div>
                         <div className="w-full h-2 bg-gray-600 rounded-full">
                           <div 
                             className={`h-2 transition-all duration-300 rounded-full ${
-                              progress.cornerNodes.blocked ? 'bg-red-500' : 'bg-purple-400'
+                              progress.fullBlockchain?.status === 'locked' ? 'bg-orange-500' :
+                              progress.fullBlockchain?.blocked ? 'bg-red-500' : 
+                              progress.fullBlockchain?.status === 'completed' ? 'bg-green-300' : 
+                              'bg-green-400'
                             }`}
                             style={{ 
-                              width: progress.cornerNodes.blocked ? '100%' : `${(progress.cornerNodes.current / progress.cornerNodes.total) * 100}%` 
+                              width: (progress.fullBlockchain?.blocked || progress.fullBlockchain?.status === 'locked') ? '100%' : `${Math.min(((progress.fullBlockchain?.current || 0) / (progress.fullBlockchain?.total || 15)) * 100, 100)}%` 
                             }}
                           ></div>
                         </div>
-                        {progress.cornerNodes.blocked && progress.cornerNodes.reason && (
-                          <div className="mt-1 text-xs text-red-300">
-                            {progress.cornerNodes.reason}
+                        {progress.fullBlockchain?.status === 'locked' && (
+                          <div className="mt-1 text-xs text-orange-300">
+                            🔒 Locked - Another player has been verified for this condition
                           </div>
                         )}
-                      </div>
-
-                      <div className={`p-3 bg-gray-700 rounded-lg border ${progress.minerOfTheDay.blocked ? 'border-red-500 bg-red-900/20' : 'border-gray-600'}`}>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className={`text-sm font-semibold ${progress.minerOfTheDay.blocked ? 'text-red-400' : 'text-orange-400'}`}>
-                            {progress.minerOfTheDay.blocked ? '❌' : '⛏️'} Miner of the Day
-                          </span>
-                          <span className="text-xs text-gray-400">
-                            {progress.minerOfTheDay.blocked ? 'BLOCKED' : `${progress.minerOfTheDay.current}/${progress.minerOfTheDay.total} rows`}
-                          </span>
-                        </div>
-                        <div className="w-full h-2 bg-gray-600 rounded-full">
-                          <div 
-                            className={`h-2 transition-all duration-300 rounded-full ${
-                              progress.minerOfTheDay.blocked ? 'bg-red-500' : 'bg-orange-400'
-                            }`}
-                            style={{ 
-                              width: progress.minerOfTheDay.blocked ? '100%' : `${(progress.minerOfTheDay.current / progress.minerOfTheDay.total) * 100}%` 
-                            }}
-                          ></div>
-                        </div>
-                        {progress.minerOfTheDay.blocked && progress.minerOfTheDay.reason && (
+                        {progress.fullBlockchain?.blocked && progress.fullBlockchain?.status !== 'locked' && (
                           <div className="mt-1 text-xs text-red-300">
-                            {progress.minerOfTheDay.reason}
+                            {progress.fullBlockchain?.reason || "Failed ticket numbers."}
                           </div>
                         )}
-                      </div>
-
-                      <div className={`p-3 bg-gray-700 rounded-lg border sm:col-span-2 lg:col-span-1 ${progress.fullBlockchain.blocked ? 'border-red-500 bg-red-900/20' : 'border-gray-600'}`}>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className={`text-sm font-semibold ${progress.fullBlockchain.blocked ? 'text-red-400' : 'text-green-400'}`}>
-                            {progress.fullBlockchain.blocked ? '❌' : '🏆'} Full Blockchain
-                          </span>
-                          <span className="text-xs text-gray-400">
-                            {progress.fullBlockchain.blocked ? 'BLOCKED' : `${progress.fullBlockchain.current}/${progress.fullBlockchain.total} numbers`}
-                          </span>
-                        </div>
-                        <div className="w-full h-2 bg-gray-600 rounded-full">
-                          <div 
-                            className={`h-2 transition-all duration-300 rounded-full ${
-                              progress.fullBlockchain.blocked ? 'bg-red-500' : 'bg-green-400'
-                            }`}
-                            style={{ 
-                              width: progress.fullBlockchain.blocked ? '100%' : `${(progress.fullBlockchain.current / progress.fullBlockchain.total) * 100}%` 
-                            }}
-                          ></div>
-                        </div>
-                        {progress.fullBlockchain.blocked && progress.fullBlockchain.reason && (
-                          <div className="mt-1 text-xs text-red-300">
-                            {progress.fullBlockchain.reason}
+                        {!progress.fullBlockchain?.blocked && progress.fullBlockchain?.status !== 'locked' && progress.fullBlockchain?.numbersToGo > 0 && (
+                          <div className="mt-1 text-xs text-gray-400">
+                            {progress.fullBlockchain.numbersToGo} more to go
+                          </div>
+                        )}
+                        {progress.fullBlockchain?.status === 'completed' && (
+                          <div className="mt-1 text-xs text-green-300">
+                            🎉 Full House completed! Waiting for host to verify...
                           </div>
                         )}
                       </div>
                     </>
                   )
                 })()}
-              </div>
             </div>
-
-            {/* Recent Numbers */}
+          </div>            {/* Recent Numbers */}
             <div className="p-4 bg-gray-800 border border-gray-600 rounded-xl">
               <h3 className="mb-3 font-semibold text-white">Recently Called Numbers</h3>
               <div className="flex flex-wrap gap-2">

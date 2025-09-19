@@ -73,8 +73,26 @@ export class GameService {
         return { success: false, error: 'Game not found' }
       }
 
-      // Check if player already registered
+      // Check if player already registered with same email AND same details
       const existingPlayers = await databases.listDocuments(
+        this.dbId,
+        this.collections.players,
+        [
+          Query.equal('gameId', gameId),
+          Query.equal('email', playerData.email),
+          Query.equal('name', playerData.name),
+          Query.equal('regNo', playerData.regNo)
+        ]
+      )
+
+      if (existingPlayers.documents.length > 0) {
+        // Return existing player data if it's truly the same player (same email, name, and regNo)
+        const existingPlayer = existingPlayers.documents[0]
+        return { success: true, player: existingPlayer, isReturning: true }
+      }
+
+      // Check if someone else already used this email with different details
+      const emailConflict = await databases.listDocuments(
         this.dbId,
         this.collections.players,
         [
@@ -83,8 +101,14 @@ export class GameService {
         ]
       )
 
-      if (existingPlayers.documents.length > 0) {
-        return { success: false, error: 'Player already registered with this email' }
+      if (emailConflict.documents.length > 0) {
+        const conflictPlayer = emailConflict.documents[0]
+        if (conflictPlayer.name !== playerData.name || conflictPlayer.regNo !== playerData.regNo) {
+          return { 
+            success: false, 
+            error: `Email ${playerData.email} is already registered with different details. Please use a different email or contact support.` 
+          }
+        }
       }
 
       // Register new player
@@ -485,7 +509,7 @@ export class GameService {
         }
       }
 
-      const winConditions = ['earlyAdopter', 'gasSaver', 'cornerNodes', 'minerOfDay', 'fullBlockchain']
+      const winConditions = ['earlyAdopter', 'gasSaver', 'fullBlockchain']
       const winnerData = {}
 
       // Get all players with any wins in single query (optimized)
@@ -535,6 +559,119 @@ export class GameService {
       delete this._winnerCache[`winners_${gameId}`]
     } else {
       this._winnerCache = {}
+    }
+  }
+
+  // Get pending verification requests for a game (host use)
+  async getPendingVerificationRequests(gameId) {
+    try {
+      const response = await databases.listDocuments(
+        this.dbId,
+        this.collections.verificationRequests,
+        [
+          Query.equal('gameId', gameId),
+          Query.equal('status', 'pending')
+        ]
+      )
+
+      return { success: true, requests: response.documents }
+    } catch (error) {
+      // If verification collection doesn't exist, return empty array
+      if (error.message && error.message.includes('Collection with the requested ID could not be found')) {
+        console.log('📝 Verification collection not found, returning empty requests')
+        return { success: true, requests: [] }
+      }
+      
+      console.error('Failed to get pending verification requests:', error)
+      return { success: false, error: error.message, requests: [] }
+    }
+  }
+
+  // Approve or reject a win verification request (host use)
+  async updateVerificationRequest(verificationId, status, hostId, reason = null) {
+    try {
+      console.log('🔍 Updating verification request:', { verificationId, status, hostId })
+      
+      const updateData = {
+        status: status, // 'approved' or 'rejected'
+        verifiedAt: new Date().toISOString(),
+        verifiedBy: hostId,
+        rejectionReason: reason
+      }
+
+      const response = await databases.updateDocument(
+        this.dbId,
+        this.collections.verificationRequests,
+        verificationId,
+        updateData
+      )
+
+      // If approved, also update the player record with the winning condition
+      if (status === 'approved') {
+        const verificationRequest = response
+        await this.declareWinner(verificationRequest.playerId, verificationRequest.conditionId)
+      }
+
+      console.log('✅ Verification request updated successfully:', response)
+      return { success: true, verificationRequest: response }
+    } catch (error) {
+      // If verification collection doesn't exist, handle gracefully
+      if (error.message && error.message.includes('Collection with the requested ID could not be found')) {
+        console.log('📝 Verification collection not found, cannot update verification request')
+        return { success: false, error: 'Verification system not available', fallback: true }
+      }
+      
+      console.error('❌ Failed to update verification request:', error)
+      return { success: false, error: error.message }
+    }
+  }
+
+  // Declare a winner by updating player record with verified winning condition
+  async declareWinner(playerId, condition) {
+    try {
+      console.log('👑 Declaring winner:', { playerId, condition })
+      
+      const timestamp = new Date().toISOString()
+      
+      // Get current player data
+      const currentPlayer = await databases.getDocument(
+        this.dbId,
+        this.collections.players,
+        playerId
+      )
+
+      // Parse existing winTimestamps
+      let winTimestamps = {}
+      if (currentPlayer.winTimestamps) {
+        try {
+          winTimestamps = JSON.parse(currentPlayer.winTimestamps)
+        } catch (e) {
+          console.warn('Failed to parse existing winTimestamps, using empty object')
+          winTimestamps = {}
+        }
+      }
+
+      // Update player record with winning condition
+      const updateData = {
+        [condition]: true,
+        winTimestamps: JSON.stringify({
+          ...winTimestamps,
+          [condition]: timestamp
+        })
+      }
+
+      const response = await databases.updateDocument(
+        this.dbId,
+        this.collections.players,
+        playerId,
+        updateData
+      )
+
+      console.log(`🏆 Winner declared: Player ${playerId} for ${condition}`)
+      return { success: true, player: response }
+    } catch (error) {
+      console.error('❌ Failed to declare winner:', error)
+      return { success: false, error: error.message }
     }
   }
 }

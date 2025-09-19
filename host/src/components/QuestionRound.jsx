@@ -50,7 +50,7 @@ const QuestionRound = ({
 
   // Create animation effect for options when question phase starts
   useEffect(() => {
-    if (currentPhase === 'question' && countdown === 30) {
+    if (currentPhase === 'question' && countdown === 15) {
       setAnimateOptions(true)
       setTimeout(() => setAnimateOptions(false), 800)
     }
@@ -89,11 +89,11 @@ const QuestionRound = ({
   }
 
   const startQuestionPhase = () => {
-    // Phase 2: Exactly 30 seconds question
+    // Phase 2: Exactly 15 seconds question
     setCurrentPhase('question')
-    setCountdown(30)
+    setCountdown(15)
     
-    let timeLeft = 30
+    let timeLeft = 15
     const questionTimer = setInterval(() => {
       timeLeft--
       setCountdown(timeLeft)
@@ -161,7 +161,7 @@ const QuestionRound = ({
       return ((5 - countdown) / 5) * 100
     }
     if (currentPhase === 'question') {
-      return ((30 - countdown) / 30) * 100
+      return ((15 - countdown) / 15) * 100
     }
     if (currentPhase === 'scoring') {
       return ((5 - countdown) / 5) * 100

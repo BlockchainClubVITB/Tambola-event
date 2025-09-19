@@ -9,7 +9,8 @@ export const APPWRITE_CONFIG = {
     games: import.meta.env.VITE_APPWRITE_GAMES_COLLECTION_ID,
     players: import.meta.env.VITE_APPWRITE_PLAYERS_COLLECTION_ID,
     rounds: import.meta.env.VITE_APPWRITE_ROUNDS_COLLECTION_ID,
-    answers: import.meta.env.VITE_APPWRITE_ANSWERS_COLLECTION_ID
+    answers: import.meta.env.VITE_APPWRITE_ANSWERS_COLLECTION_ID,
+    verificationRequests: import.meta.env.VITE_APPWRITE_VERIFICATION_REQUESTS_COLLECTION_ID || 'verification_requests'
   }
 }
 
