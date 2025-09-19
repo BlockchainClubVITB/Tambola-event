@@ -587,6 +587,110 @@ export class GameService {
     }
   }
 
+  // Get pending win requests for a game (host use) - supports both winRequests and verificationRequests
+  async getPendingWinRequests(gameId) {
+    try {
+      // Try winRequests collection first
+      try {
+        const response = await databases.listDocuments(
+          this.dbId,
+          'winRequests',
+          [
+            Query.equal('gameId', gameId),
+            Query.equal('status', 'pending'),
+            Query.orderDesc('createdAt')
+          ]
+        )
+
+        console.log(`📝 Found ${response.documents.length} pending win requests`)
+        return { success: true, requests: response.documents }
+      } catch (error) {
+        // Fall back to verificationRequests collection
+        if (error.message && error.message.includes('Collection with the requested ID could not be found')) {
+          console.log('📝 winRequests collection not found, trying verificationRequests')
+          const response = await databases.listDocuments(
+            this.dbId,
+            'verificationRequests',
+            [
+              Query.equal('gameId', gameId),
+              Query.equal('status', 'pending'),
+              Query.orderDesc('createdAt')
+            ]
+          )
+
+          console.log(`📝 Found ${response.documents.length} pending verification requests`)
+          return { success: true, requests: response.documents }
+        }
+        throw error
+      }
+    } catch (error) {
+      // If both collections don't exist, return empty array
+      if (error.message && error.message.includes('Collection with the requested ID could not be found')) {
+        console.log('📝 No win request collections found, returning empty requests')
+        return { success: true, requests: [] }
+      }
+      
+      console.error('Failed to get pending win requests:', error)
+      return { success: false, error: error.message, requests: [] }
+    }
+  }
+
+  // Approve a win request and declare the winner
+  async approveWinRequest(requestId, playerId, playerName, condition) {
+    try {
+      console.log(`🏆 Approving win request: ${playerName} for ${condition}`)
+
+      // First, try to update the request status to approved
+      let requestUpdateResult = null
+      try {
+        // Try winRequests collection first
+        requestUpdateResult = await databases.updateDocument(
+          this.dbId,
+          'winRequests',
+          requestId,
+          {
+            status: 'approved',
+            approvedAt: new Date().toISOString()
+          }
+        )
+      } catch (error) {
+        // Fall back to verificationRequests collection
+        if (error.message && error.message.includes('Collection with the requested ID could not be found')) {
+          requestUpdateResult = await databases.updateDocument(
+            this.dbId,
+            'verificationRequests',
+            requestId,
+            {
+              status: 'approved',
+              verifiedAt: new Date().toISOString(),
+              verifiedBy: 'host'
+            }
+          )
+        } else {
+          throw error
+        }
+      }
+
+      // Then declare the winner (update player record)
+      const declareResult = await this.declareWinner(playerId, condition)
+      
+      if (declareResult.success) {
+        console.log(`✅ Win request approved and winner declared: ${playerName} for ${condition}`)
+        return { 
+          success: true, 
+          request: requestUpdateResult,
+          winner: declareResult.player 
+        }
+      } else {
+        console.error('Failed to declare winner after approving request:', declareResult.error)
+        return { success: false, error: declareResult.error }
+      }
+    } catch (error) {
+      console.error('Failed to approve win request:', error)
+      return { success: false, error: error.message }
+    }
+  }
+
   // Approve or reject a win verification request (host use)
   async updateVerificationRequest(verificationId, status, hostId, reason = null) {
     try {
@@ -740,20 +844,61 @@ export class GameService {
       'Lightning', 'Thunder', 'Blazing', 'Mighty', 'Swift', 'Golden', 'Silver', 'Diamond',
       'Phoenix', 'Dragon', 'Eagle', 'Tiger', 'Wolf', 'Storm', 'Fire', 'Ice',
       'Royal', 'Elite', 'Prime', 'Supreme', 'Alpha', 'Beta', 'Omega', 'Cosmic',
-      'Quantum', 'Cyber', 'Neon', 'Turbo', 'Ultra', 'Mega', 'Super', 'Hyper'
+      'Quantum', 'Cyber', 'Neon', 'Turbo', 'Ultra', 'Mega', 'Super', 'Hyper',
+      'Shadow', 'Ghost', 'Spirit', 'Phantom', 'Mystic', 'Magic', 'Crystal', 'Emerald',
+      'Ruby', 'Sapphire', 'Platinum', 'Steel', 'Iron', 'Bronze', 'Crimson', 'Scarlet',
+      'Azure', 'Violet', 'Amber', 'Jade', 'Onyx', 'Pearl', 'Obsidian', 'Titanium',
+      'Stellar', 'Galactic', 'Solar', 'Lunar', 'Astral', 'Nebula', 'Meteor', 'Comet',
+      'Arctic', 'Volcanic', 'Electric', 'Magnetic', 'Atomic', 'Nuclear', 'Digital', 'Virtual',
+      'Sonic', 'Supersonic', 'Hypersonic', 'Velocity', 'Accelerated', 'Boosted', 'Enhanced', 'Advanced'
     ]
     
     const nouns = [
       'Warriors', 'Knights', 'Champions', 'Legends', 'Heroes', 'Titans', 'Giants', 'Masters',
       'Guardians', 'Defenders', 'Crusaders', 'Gladiators', 'Vikings', 'Spartans', 'Ninjas', 'Samurai',
       'Rockets', 'Eagles', 'Hawks', 'Falcons', 'Lions', 'Panthers', 'Wolves', 'Bears',
-      'Coders', 'Hackers', 'Wizards', 'Mages', 'Sorcerers', 'Alchemists', 'Engineers', 'Architects'
+      'Coders', 'Hackers', 'Wizards', 'Mages', 'Sorcerers', 'Alchemists', 'Engineers', 'Architects',
+      'Destroyers', 'Conquerors', 'Dominators', 'Terminators', 'Eliminators', 'Annihilators', 'Obliterators', 'Devastators',
+      'Strikers', 'Raiders', 'Hunters', 'Trackers', 'Scouts', 'Rangers', 'Commandos', 'Marines',
+      'Aces', 'Pilots', 'Navigators', 'Explorers', 'Pioneers', 'Voyagers', 'Adventurers', 'Wanderers',
+      'Builders', 'Creators', 'Inventors', 'Innovators', 'Designers', 'Craftsmen', 'Artisans', 'Makers',
+      'Rebels', 'Rogues', 'Mavericks', 'Outlaws', 'Bandits', 'Pirates', 'Corsairs', 'Buccaneers',
+      'Phoenixes', 'Dragons', 'Griffins', 'Hydras', 'Krakens', 'Leviathans', 'Behemoths', 'Goliaths'
     ]
     
     const adjective = adjectives[Math.floor(Math.random() * adjectives.length)]
     const noun = nouns[Math.floor(Math.random() * nouns.length)]
     
     return `${adjective} ${noun}`
+  }
+
+  // Generate unique team name (checks for duplicates)
+  async generateUniqueTeamName(maxAttempts = 50) {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const teamName = this.generateRandomTeamName()
+      
+      try {
+        // Check if team name already exists
+        const existingTeams = await databases.listDocuments(
+          this.dbId,
+          this.collections.teamMembers,
+          [Query.equal('teamName', teamName)]
+        )
+        
+        if (existingTeams.documents.length === 0) {
+          return teamName // Unique name found
+        }
+      } catch (error) {
+        console.warn('Error checking team name uniqueness:', error)
+        // If there's an error checking, just return the generated name
+        return teamName
+      }
+    }
+    
+    // Fallback: add timestamp if all attempts failed
+    const fallbackName = this.generateRandomTeamName()
+    const timestamp = Date.now().toString().slice(-4)
+    return `${fallbackName} ${timestamp}`
   }
 
   // Generate random password
@@ -767,55 +912,49 @@ export class GameService {
   }
 
   // Register a team only (without game creation)
-  async registerTeamOnly(members) {
+  async registerTeamOnly(teamData) {
     try {
-      console.log('🏆 Registering team with members:', members)
+      console.log('🏆 Registering team with data:', teamData)
       
-      // Validate that we have exactly 4 members
-      if (!members || members.length !== 4) {
-        return { success: false, error: 'Team must have exactly 4 members' }
+      // Validate that we have required fields
+      if (!teamData || !teamData.teamName || !teamData.teamPassword) {
+        return { success: false, error: 'Team name and password are required' }
       }
 
-      // Validate member data
-      for (let i = 0; i < members.length; i++) {
-        const member = members[i]
-        if (!member.name || !member.regNo || !member.email) {
-          return { success: false, error: `Member ${i + 1} is missing required fields (name, regNo, email)` }
-        }
-      }
-
-      // Generate random team name and password
-      const teamName = this.generateRandomTeamName()
-      const teamPassword = this.generateRandomPassword()
-
-      // Create team member documents (without gameId)
-      const teamMemberPromises = members.map(member => 
-        databases.createDocument(
+      // Check if team name already exists
+      try {
+        const existingTeam = await databases.listDocuments(
           this.dbId,
           this.collections.teamMembers,
-          generateId(),
-          {
-            name: member.name,
-            regNo: member.regNo,
-            email: member.email,
-            teamName: teamName,
-            teamPassword: teamPassword,
-            createdAt: new Date().toISOString()
-          }
+          [Query.equal('teamName', teamData.teamName)]
         )
+        
+        if (existingTeam.documents.length > 0) {
+          return { success: false, error: 'Team name already exists. Please choose a different name.' }
+        }
+      } catch (error) {
+        console.log('No existing team found, proceeding with registration')
+      }
+
+      // Create team document with only teamName and teamPassword
+      const teamDoc = await databases.createDocument(
+        this.dbId,
+        this.collections.teamMembers,
+        generateId(),
+        {
+          teamName: teamData.teamName.trim(),
+          teamPassword: teamData.teamPassword.trim()
+        }
       )
 
-      // Execute all team member creations
-      const teamMemberResults = await Promise.all(teamMemberPromises)
-
-      console.log('✅ Team registered successfully:', { teamName, teamPassword })
+      console.log('✅ Team registered successfully:', { teamName: teamData.teamName, teamPassword: teamData.teamPassword })
       
       return { 
         success: true, 
-        teamName, 
-        teamPassword,
-        teamMembers: teamMemberResults,
-        message: `Team "${teamName}" registered successfully with password "${teamPassword}"` 
+        teamName: teamData.teamName,
+        teamPassword: teamData.teamPassword,
+        teamDoc: teamDoc,
+        message: `Team "${teamData.teamName}" registered successfully` 
       }
     } catch (error) {
       console.error('❌ Failed to register team:', error)
@@ -831,23 +970,15 @@ export class GameService {
         this.collections.teamMembers,
         [
           Query.equal('teamName', teamName),
-          Query.equal('teamPassword', teamPassword),
-          Query.equal('isRegistered', true)
+          Query.equal('teamPassword', teamPassword)
         ]
       )
 
-      if (response.documents.length >= 4) {
-        // Return team member details
-        const teamMembers = response.documents.map(doc => ({
-          name: doc.name,
-          regNo: doc.regNo,
-          email: doc.email
-        }))
-
+      if (response.documents.length > 0) {
+        // Team credentials are valid
         return { 
           success: true, 
           isValid: true, 
-          teamMembers,
           teamName,
           message: 'Team credentials verified successfully' 
         }
@@ -917,8 +1048,8 @@ export class GameService {
         }
       }
 
-      // Generate random team name and password
-      const teamName = this.generateRandomTeamName()
+      // Generate unique team name and password
+      const teamName = await this.generateUniqueTeamName()
       const teamPassword = this.generateRandomPassword()
 
       // Create team member documents
@@ -1009,6 +1140,80 @@ export class GameService {
     } catch (error) {
       console.error('Failed to get game teams:', error)
       return { success: false, error: error.message, teams: [] }
+    }
+  }
+
+  // Declare a winner and block that condition for all other players
+  async declareWinnerAndBlock(gameId, playerId, condition) {
+    try {
+      console.log(`🏆 Declaring winner and blocking condition ${condition} for game ${gameId}`)
+      
+      // First, get all players in the game
+      const allPlayersResult = await databases.listDocuments(
+        this.dbId,
+        this.collections.players,
+        [Query.equal('gameId', gameId)]
+      )
+
+      if (!allPlayersResult.documents || allPlayersResult.documents.length === 0) {
+        return { success: false, error: 'No players found in game' }
+      }
+
+      // Get the winner player
+      const winnerPlayer = allPlayersResult.documents.find(p => p.$id === playerId)
+      if (!winnerPlayer) {
+        return { success: false, error: 'Winner player not found' }
+      }
+
+      // Update all players to block this condition
+      const updatePromises = allPlayersResult.documents.map(async (player) => {
+        try {
+          if (player.$id === playerId) {
+            // For the winner: mark the condition as won
+            await databases.updateDocument(
+              this.dbId,
+              this.collections.players,
+              player.$id,
+              {
+                [condition]: true,
+                [`${condition}Blocked`]: true // Also mark as blocked to prevent further wins
+              }
+            )
+            console.log(`✅ Winner ${player.name} marked for ${condition}`)
+          } else {
+            // For all other players: mark the condition as blocked
+            await databases.updateDocument(
+              this.dbId,
+              this.collections.players,
+              player.$id,
+              {
+                [`${condition}Blocked`]: true
+              }
+            )
+            console.log(`🚫 Player ${player.name} blocked for ${condition}`)
+          }
+        } catch (error) {
+          console.error(`Failed to update player ${player.name}:`, error)
+        }
+      })
+
+      // Wait for all updates to complete
+      await Promise.all(updatePromises)
+
+      // Clear winners cache to force refresh
+      this.clearWinnerCache(gameId)
+
+      console.log(`🎯 Winner declared: ${winnerPlayer.name} won ${condition}, condition blocked for all other players`)
+      
+      return { 
+        success: true, 
+        winner: winnerPlayer,
+        condition,
+        message: `${winnerPlayer.name} declared winner for ${condition}. Condition blocked for all other players.` 
+      }
+    } catch (error) {
+      console.error('Failed to declare winner and block condition:', error)
+      return { success: false, error: error.message }
     }
   }
 }

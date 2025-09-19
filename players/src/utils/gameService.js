@@ -1,5 +1,5 @@
 import { databases, generateId, APPWRITE_CONFIG } from './appwrite.js'
-import { Query } from 'appwrite'
+import { Query, ID } from 'appwrite'
 import client from './appwrite.js'
 
 // Game Service for managing Tambola games with Appwrite
@@ -231,48 +231,28 @@ export class GameService {
   }
 
   // Update player score
-  // Check if a winning condition has already been won by another player
+  // Check if a winning condition has already been won or blocked
   async checkWinConditionAvailable(gameId, condition) {
     try {
-      // Check if any verification request for this condition has been approved
-      const verificationResult = await databases.listDocuments(
+      // Check if any player has already won this condition OR if condition is blocked
+      const result = await databases.listDocuments(
         this.dbId,
-        this.collections.verificationRequests,
+        this.collections.players,
         [
           Query.equal('gameId', gameId),
-          Query.equal('conditionId', condition),
-          Query.equal('status', 'approved'),
-          Query.limit(1) // Only need to know if any request has been approved
+          Query.or([
+            Query.equal(condition, true),
+            Query.equal(`${condition}Blocked`, true)
+          ]),
+          Query.limit(1) // Only need to know if any player has won or blocked this condition
         ]
       )
       
-      // Return true if no verified winner exists for this condition yet
-      return verificationResult.documents.length === 0
+      // Return true if no one has won/blocked this condition yet
+      return result.documents.length === 0
     } catch (error) {
-      // If verification collection doesn't exist, fall back to checking player records
-      if (error.message && error.message.includes('Collection with the requested ID could not be found')) {
-        console.log('📝 Verification collection not found, falling back to direct player check')
-        try {
-          const result = await databases.listDocuments(
-            this.dbId,
-            this.collections.players,
-            [
-              Query.equal('gameId', gameId),
-              Query.equal(condition, true),
-              Query.limit(1) // Only need to know if any player has won this condition
-            ]
-          )
-          
-          // Return true if no one has won this condition yet
-          return result.documents.length === 0
-        } catch (fallbackError) {
-          console.error(`Failed to check ${condition} availability (fallback):`, fallbackError)
-          return true
-        }
-      }
-      
       console.error(`Failed to check ${condition} availability:`, error)
-      // On error, allow the verification request attempt (fail open)
+      // On error, allow the win attempt (fail open)
       return true
     }
   }
@@ -292,46 +272,26 @@ export class GameService {
         const currentScore = currentPlayer.score || 0
         const newScore = currentScore + 10
 
-        // Prepare update data with score, wins, and correct numbers in one request
+        // Prepare update data with score, correct numbers, and win conditions in one request
         const updateData = {
           score: newScore,
           correctNumbers: Array.from(correctNumbers)
         }
 
-        // Check which winning conditions need verification requests
-        const verificationRequests = []
-        const deniedWins = []
-        
+        // Add any newly achieved win conditions directly to player document
+        const newWins = []
         for (const [condition, won] of Object.entries(winConditions)) {
-          if (won && !currentPlayer[condition]) { // Only if player hasn't achieved this condition yet
-            // Submit verification request
-            const verificationResult = await this.submitWinVerificationRequest(
-              gameId, 
-              playerId, 
-              condition, 
-              currentPlayer.ticketNumbers || [], 
-              correctNumbers, 
-              new Set() // incorrect numbers - empty for now
-            )
-            
-            if (verificationResult.success) {
-              verificationRequests.push({
-                condition,
-                verificationId: verificationResult.verificationRequest.verificationId,
-                status: 'pending'
-              })
-              console.log(`📝 Verification request submitted for ${condition} by player ${playerId}`)
-            } else if (verificationResult.alreadyWon) {
-              // This condition already has a winner
-              deniedWins.push(condition)
-              console.log(`🚫 ${condition} already won by another player, request denied for ${playerId}`)
-            } else {
-              console.error(`Failed to submit verification request for ${condition}:`, verificationResult.error)
-            }
+          if (won && !currentPlayer[condition] && !currentPlayer[`${condition}Blocked`]) { 
+            // Only if player hasn't achieved this condition yet AND condition is not blocked
+            updateData[condition] = true // Mark condition as achieved directly
+            newWins.push(condition)
+            console.log(`🏆 Win achieved for ${condition} by player ${currentPlayer.name} - marking directly on player`)
+          } else if (won && currentPlayer[`${condition}Blocked`]) {
+            console.log(`🚫 Win condition ${condition} is blocked for player ${currentPlayer.name}`)
           }
         }
 
-        // SINGLE REQUEST: Update everything at once
+        // SINGLE REQUEST: Update everything at once including win conditions
         const response = await databases.updateDocument(
           this.dbId,
           this.collections.players,
@@ -339,14 +299,13 @@ export class GameService {
           updateData
         )
 
-        console.log(`✅ OPTIMIZED: Player ${playerId} updated in single request: score ${currentScore} -> ${newScore}, verification requests:`, verificationRequests)
+        console.log(`✅ OPTIMIZED: Player ${playerId} updated in single request: score ${currentScore} -> ${newScore}, wins: ${newWins.join(', ')}`)
         return { 
           success: true, 
           newScore, 
           player: response, 
-          verificationRequests, // Return verification requests instead of direct wins
-          deniedWins, // Return conditions already won by others
-          message: 'Score updated and verification requests submitted' 
+          newWins, // Return newly achieved wins for notifications
+          message: 'Score and wins updated successfully' 
         }
       } else {
         // Wrong answer - no database update needed
@@ -514,6 +473,39 @@ export class GameService {
     }
   }
 
+  // Get all winners grouped by condition
+  async getAllWinners(gameId) {
+    try {
+      const response = await databases.listDocuments(
+        this.dbId,
+        this.collections.players,
+        [Query.equal('gameId', gameId)]
+      )
+
+      const winners = {}
+      const conditions = ['topLine', 'middleLine', 'bottomLine', 'fullHouse', 'earlyFive', 'corners']
+      
+      // Initialize all conditions as empty arrays
+      conditions.forEach(condition => {
+        winners[condition] = []
+      })
+
+      // Group players by their winning conditions
+      response.documents.forEach(player => {
+        conditions.forEach(condition => {
+          if (player[condition] === true) {
+            winners[condition].push(player)
+          }
+        })
+      })
+
+      return { success: true, winners }
+    } catch (error) {
+      console.error('Failed to get all winners:', error)
+      return { success: false, error: error.message }
+    }
+  }
+
   // Check if a player has already won a specific condition
   async hasPlayerWon(playerId, condition) {
     try {
@@ -577,146 +569,7 @@ export class GameService {
     }
   }
 
-  // Submit a win verification request
-  async submitWinVerificationRequest(gameId, playerId, conditionId, playerTicket, correctNumbers, incorrectNumbers) {
-    try {
-      console.log('📝 Submitting win verification request:', { gameId, playerId, conditionId })
-      
-      // First check if this condition already has a winner
-      const existingWinners = await this.getGameWinners(gameId, conditionId)
-      if (existingWinners.success && existingWinners.winners.length > 0) {
-        console.log(`🚫 ${conditionId} already has a winner, rejecting new request from player ${playerId}`)
-        return { 
-          success: false, 
-          error: `${conditionId} already won by another player`,
-          alreadyWon: true 
-        }
-      }
-      
-      // Create verification request document
-      const verificationRequest = {
-        verificationId: generateId(),
-        gameId: gameId,
-        playerId: playerId,
-        conditionId: conditionId,
-        playerTicket: playerTicket,
-        correctNumbers: Array.from(correctNumbers),
-        incorrectNumbers: Array.from(incorrectNumbers),
-        status: 'pending', // pending, approved, rejected
-        requestedAt: new Date().toISOString(),
-        verifiedAt: null,
-        verifiedBy: null
-      }
-
-      const response = await databases.createDocument(
-        this.dbId,
-        this.collections.verificationRequests,
-        verificationRequest.verificationId,
-        verificationRequest
-      )
-
-      console.log('✅ Win verification request submitted successfully:', response)
-      return { success: true, verificationRequest: response }
-    } catch (error) {
-      // If verification collection doesn't exist, fall back to direct win assignment
-      if (error.message && error.message.includes('Collection with the requested ID could not be found')) {
-        console.log('📝 Verification collection not found, falling back to direct win assignment')
-        try {
-          // Update player record directly with the winning condition
-          const timestamp = new Date().toISOString()
-          const updateData = {
-            [conditionId]: true,
-            winTimestamps: JSON.stringify({
-              [conditionId]: timestamp
-            })
-          }
-
-          const response = await databases.updateDocument(
-            this.dbId,
-            this.collections.players,
-            playerId,
-            updateData
-          )
-
-          console.log(`🏆 Direct win assigned: Player ${playerId} for ${conditionId}`)
-          return { 
-            success: true, 
-            verificationRequest: { 
-              verificationId: generateId(), 
-              status: 'auto-approved',
-              fallback: true 
-            } 
-          }
-        } catch (fallbackError) {
-          console.error('❌ Failed to assign direct win (fallback):', fallbackError)
-          return { success: false, error: fallbackError.message }
-        }
-      }
-      
-      console.error('❌ Failed to submit win verification request:', error)
-      return { success: false, error: error.message }
-    }
-  }
-
-  // Get pending verification requests for a game (host use)
-  async getPendingVerificationRequests(gameId) {
-    try {
-      const response = await databases.listDocuments(
-        this.dbId,
-        this.collections.verificationRequests,
-        [
-          Query.equal('gameId', gameId),
-          Query.equal('status', 'pending')
-        ]
-      )
-
-      return { success: true, requests: response.documents }
-    } catch (error) {
-      // If verification collection doesn't exist, return empty array
-      if (error.message && error.message.includes('Collection with the requested ID could not be found')) {
-        console.log('📝 Verification collection not found, returning empty requests')
-        return { success: true, requests: [] }
-      }
-      
-      console.error('Failed to get pending verification requests:', error)
-      return { success: false, error: error.message, requests: [] }
-    }
-  }
-
-  // Approve or reject a win verification request (host use)
-  async updateVerificationRequest(verificationId, status, hostId, reason = null) {
-    try {
-      console.log('🔍 Updating verification request:', { verificationId, status, hostId })
-      
-      const updateData = {
-        status: status, // 'approved' or 'rejected'
-        verifiedAt: new Date().toISOString(),
-        verifiedBy: hostId,
-        rejectionReason: reason
-      }
-
-      const response = await databases.updateDocument(
-        this.dbId,
-        this.collections.verificationRequests,
-        verificationId,
-        updateData
-      )
-
-      // If approved, also update the player record with the winning condition
-      if (status === 'approved') {
-        const verificationRequest = response
-        await this.declareWinner(verificationRequest.playerId, verificationRequest.conditionId)
-      }
-
-      console.log('✅ Verification request updated successfully:', response)
-      return { success: true, verificationRequest: response }
-    } catch (error) {
-      console.error('❌ Failed to update verification request:', error)
-      return { success: false, error: error.message }
-    }
-  }
-
-  // Declare a winner by updating player record with verified winning condition
+  // Declare a winner by updating player record directly (simplified)
   async declareWinner(playerId, condition) {
     try {
       console.log('👑 Declaring winner:', { playerId, condition })
@@ -765,42 +618,6 @@ export class GameService {
     }
   }
 
-  // Get verification status for a player's conditions
-  async getPlayerVerificationStatus(gameId, playerId) {
-    try {
-      const response = await databases.listDocuments(
-        this.dbId,
-        this.collections.verificationRequests,
-        [
-          Query.equal('gameId', gameId),
-          Query.equal('playerId', playerId)
-        ]
-      )
-
-      // Convert to status object by condition
-      const statusByCondition = {}
-      response.documents.forEach(request => {
-        statusByCondition[request.conditionId] = {
-          status: request.status,
-          requestedAt: request.requestedAt,
-          verifiedAt: request.verifiedAt,
-          rejectionReason: request.rejectionReason
-        }
-      })
-
-      return { success: true, verificationStatus: statusByCondition }
-    } catch (error) {
-      // If verification collection doesn't exist, return empty status
-      if (error.message && error.message.includes('Collection with the requested ID could not be found')) {
-        console.log('📝 Verification collection not found, returning empty status')
-        return { success: true, verificationStatus: {} }
-      }
-      
-      console.error('Failed to get player verification status:', error)
-      return { success: false, error: error.message, verificationStatus: {} }
-    }
-  }
-
   // Verify team credentials when joining a game
   async verifyTeamCredentials(teamName, teamPassword, gameId) {
     try {
@@ -837,25 +654,11 @@ export class GameService {
         }
       }
 
-      if (teamMembersResponse.documents.length < 4) {
-        return { 
-          success: true, 
-          isValid: false, 
-          message: 'Team registration incomplete (needs 4 members)' 
-        }
-      }
-
-      // Return team member details
-      const teamMembers = teamMembersResponse.documents.map(doc => ({
-        name: doc.name,
-        regNo: doc.regNo,
-        email: doc.email
-      }))
-
+      // For simplified registration, just verify credentials exist
+      // No need to check for 4 members since we only store team info now
       return { 
         success: true, 
         isValid: true, 
-        teamMembers,
         teamName,
         gameId,
         message: 'Team credentials verified successfully' 
@@ -863,6 +666,32 @@ export class GameService {
     } catch (error) {
       console.error('Failed to verify team credentials:', error)
       return { success: false, error: error.message, isValid: false }
+    }
+  }
+
+  // Check for blocked conditions for a player
+  async getBlockedConditions(playerId) {
+    try {
+      const player = await databases.getDocument(
+        this.dbId,
+        this.collections.players,
+        playerId
+      )
+
+      const blockedConditions = []
+      const winConditions = ['firstLineWon', 'fourCornersWon', 'fullHouseWon']
+      
+      winConditions.forEach(condition => {
+        if (player[`${condition}Blocked`] && !player[condition]) {
+          // Condition is blocked but player hasn't won it
+          blockedConditions.push(condition)
+        }
+      })
+
+      return { success: true, blockedConditions }
+    } catch (error) {
+      console.error('Failed to get blocked conditions:', error)
+      return { success: false, error: error.message, blockedConditions: [] }
     }
   }
 

@@ -38,8 +38,8 @@ const HostDashboard = () => {
   const [winnersLastUpdate, setWinnersLastUpdate] = useState(null)
   const winnersPerPage = 10
 
-  // Verification State
-  const [pendingVerifications, setPendingVerifications] = useState([])
+  // Win Requests State
+  const [pendingWinRequests, setPendingWinRequests] = useState([])
   const [loadingVerifications, setLoadingVerifications] = useState(false)
 
   // Polling interval
@@ -87,26 +87,22 @@ const HostDashboard = () => {
     }
   }
 
-  const refreshVerificationRequests = async () => {
+  const refreshWinRequests = async () => {
     if (!gameId) return
     
     setLoadingVerifications(true)
     try {
-      const result = await gameService.getPendingVerificationRequests(gameId)
+      const result = await gameService.getPendingWinRequests(gameId)
       if (result.success) {
-        setPendingVerifications(result.requests)
-        console.log('📝 Verification requests refreshed:', result.requests)
+        setPendingWinRequests(result.requests)
+        console.log('📝 Win requests refreshed:', result.requests)
       } else {
-        if (result.fallback) {
-          console.log('📝 Verification system not available, no pending requests')
-          setPendingVerifications([])
-        } else {
-          console.error('Failed to refresh verification requests:', result.error)
-        }
+        console.error('Failed to refresh win requests:', result.error)
+        setPendingWinRequests([])
       }
     } catch (error) {
-      console.error('Error refreshing verification requests:', error)
-      setPendingVerifications([])
+      console.error('Error refreshing win requests:', error)
+      setPendingWinRequests([])
     } finally {
       setLoadingVerifications(false)
     }
@@ -123,9 +119,9 @@ const HostDashboard = () => {
       
       if (result.success) {
         console.log(`✅ Verification ${decision}:`, result.verificationRequest)
-        // Refresh both verification requests and winners data
+        // Refresh both win requests and winners data
         await Promise.all([
-          refreshVerificationRequests(),
+          refreshWinRequests(),
           refreshWinnersData()
         ])
       } else {
@@ -142,6 +138,57 @@ const HostDashboard = () => {
       }
     } catch (error) {
       console.error(`Error ${decision} verification:`, error)
+    }
+  }
+
+  // Approve a specific win request from a player (frontend only for now)
+  const handleApproveWinRequest = async (request) => {
+    try {
+      console.log(`🏆 Approving win request from ${request.playerName} for ${request.conditionId}`)
+      
+      // TODO: Add backend API calls here later
+      // const result = await gameService.approveWinRequest(...)
+      
+    } catch (error) {
+      console.error('Error approving win request:', error)
+    }
+  }
+
+  // Declare winner and block condition for all other players
+  const handleDeclareWinner = async (condition) => {
+    try {
+      // Get the highest scoring player who hasn't won this condition yet
+      const eligiblePlayers = leaderboard.filter(player => !player[condition] && !player[`${condition}Blocked`])
+      
+      if (eligiblePlayers.length === 0) {
+        toast.error('No eligible players found for this condition')
+        return
+      }
+      
+      // Sort by score (highest first)
+      const sortedPlayers = eligiblePlayers.sort((a, b) => (b.score || 0) - (a.score || 0))
+      const topPlayer = sortedPlayers[0]
+      
+      console.log(`🏆 Declaring ${topPlayer.name} as winner for ${getWinConditionInfo()[condition].name}`)
+      
+      // Call backend to declare winner and block condition for all other players
+      const result = await gameService.declareWinnerAndBlock(gameId, topPlayer.$id, condition)
+      
+      if (result.success) {
+        toast.success(`🏆 ${topPlayer.name} declared winner for ${getWinConditionInfo()[condition].name}! Condition blocked for all other players.`)
+        
+        // Refresh winners data and leaderboard
+        await Promise.all([
+          refreshWinnersData(),
+          refreshAllData(false, true) // Force refresh to get updated player data
+        ])
+      } else {
+        toast.error(`Failed to declare winner: ${result.error}`)
+      }
+      
+    } catch (error) {
+      console.error('Error declaring winner:', error)
+      toast.error('Error declaring winner. Please try again.')
     }
   }
 
@@ -257,9 +304,6 @@ const HostDashboard = () => {
         // Single request for all winners
         const winnersResult = await gameService.getAllWinners(gameId)
         
-        // Single request for pending verification requests
-        const verificationsResult = await gameService.getPendingVerificationRequests(gameId)
-        
         // Process results
         if (leaderboardResult.success) {
           setLeaderboard(leaderboardResult.players)
@@ -281,13 +325,6 @@ const HostDashboard = () => {
         } else {
           console.error('Failed to refresh winners in refreshAllData:', winnersResult.error)
         }
-
-        if (verificationsResult.success) {
-          setPendingVerifications(verificationsResult.requests)
-          console.log('📝 Verification requests refreshed:', verificationsResult.requests)
-        } else {
-          console.error('Failed to refresh verification requests:', verificationsResult.error)
-        }
         
         // Update cache
         setDataCache({
@@ -299,10 +336,8 @@ const HostDashboard = () => {
         
         console.log('✅ Data refreshed and cached')
         
-        // Run automatic win detection after refreshing leaderboard
-        if (gameState === 'active') {
-          setTimeout(() => autoDetectWins(), 500) // Small delay to ensure state is updated
-        }
+        // Don't run automatic win detection - let host manually verify
+        
       } else {
         console.log('📋 No changes detected, using existing data')
         if (showToast) toast.success('Data is up to date!')
@@ -328,8 +363,12 @@ const HostDashboard = () => {
     }
   }
 
-  // Auto-detect wins for all players based on their tickets and scores
+  // Auto-detect wins for all players based on their tickets and scores - DISABLED
+  // Manual verification only through verification requests
   const autoDetectWins = async () => {
+    console.log('🔍 Automatic win detection disabled - using manual verification only')
+    return // Early return to disable automatic detection
+    
     if (!gameId || !leaderboard || leaderboard.length === 0) return
 
     console.log('🔍 Starting automatic win detection...')
@@ -406,11 +445,11 @@ const HostDashboard = () => {
       const getRefreshInterval = () => {
         const recentActivity = Date.now() - (dataCache.lastUpdate || 0)
         
-        // If recent activity (< 5 minutes), refresh more frequently
+        // If recent activity (< 5 minutes), refresh more frequently for immediate win display
         if (recentActivity < 300000) { // 5 minutes
-          return 20000 // 20 seconds for active periods
+          return 10000 // 10 seconds for active periods (faster for immediate wins)
         } else {
-          return 45000 // 45 seconds for quiet periods
+          return 30000 // 30 seconds for quiet periods (faster than before)
         }
       }
       
@@ -499,8 +538,7 @@ const HostDashboard = () => {
     // Smart refresh - only fetch if significant time has passed or force needed
     setTimeout(() => {
       refreshAllData(false, false) // Silent refresh, will use cache if recent
-      // Run auto-detection after the refresh to check for new wins
-      setTimeout(() => autoDetectWins(), 1000) 
+      // Don't run auto-detection after round completion - manual verification only
     }, 2000) // Small delay to ensure all players have submitted
     
     // Clear current number display
@@ -872,152 +910,108 @@ const HostDashboard = () => {
                 </div>
               )}
 
-              {/* Winners by Category */}
-              <div className="space-y-4">
+              {/* Clean Winners Board - 3 Conditions */}
+              <div className="space-y-6">
+                <h3 className="mb-6 text-xl font-bold text-white">🏆 Winners Board</h3>
+                
+                {/* 3 Winning Conditions */}
                 {Object.entries(getWinConditionInfo()).map(([condition, info]) => {
                   const conditionWinners = allWinners[condition] || []
-                  const conditionPending = pendingVerifications.filter(req => req.conditionId === condition)
                   const hasWinners = conditionWinners.length > 0
-                  const hasPending = conditionPending.length > 0
+                  const conditionRequests = pendingWinRequests.filter(req => req.conditionId === condition)
 
                   return (
                     <div
                       key={condition}
-                      className={`p-4 rounded-lg border transition-all ${
-                        hasWinners 
-                          ? 'bg-green-900/30 border-green-600/50' 
-                          : hasPending
-                          ? 'bg-yellow-900/30 border-yellow-600/50'
-                          : 'bg-gray-800/50 border-gray-700'
-                      }`}
+                      className="p-6 transition-all border border-gray-700 rounded-xl bg-gray-800/50 hover:border-gray-600"
                     >
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-3">
-                          <span className="text-2xl">{info.icon}</span>
-                          <div>
-                            <h4 className="font-semibold text-white">{info.name}</h4>
-                            <p className="text-sm text-gray-400">{info.description}</p>
-                          </div>
+                      {/* Condition Header */}
+                      <div className="flex items-center gap-4 mb-4">
+                        <div className="text-3xl">{info.icon}</div>
+                        <div>
+                          <h4 className="text-lg font-bold text-white">{info.name}</h4>
+                          <p className="text-sm text-gray-400">{info.description}</p>
                         </div>
-                        
-                        <div className="text-right">
-                          <div className="flex items-center gap-2">
-                            <div className={`text-lg font-bold ${
-                              hasWinners ? 'text-green-400' : 'text-gray-500'
-                            }`}>
-                              {conditionWinners.length}
-                            </div>
-                            <div className="text-xs text-gray-400">
-                              {conditionWinners.length === 1 ? 'Winner' : 'Winners'}
-                            </div>
-                            {hasPending && (
-                              <div className="ml-2 px-2 py-1 text-xs font-bold bg-yellow-600 text-black rounded">
-                                {conditionPending.length} Pending
-                              </div>
-                            )}
+                        <div className="ml-auto text-right">
+                          <div className={`text-2xl font-bold ${hasWinners ? 'text-green-400' : 'text-gray-500'}`}>
+                            {hasWinners ? '✅' : '⏳'}
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            {hasWinners ? 'Winner Declared' : 'No Winner Yet'}
                           </div>
                         </div>
                       </div>
 
-                      {/* Pending Verification Requests */}
-                      {hasPending && (
-                        <div className="mb-4">
-                          <h5 className="mb-2 text-sm font-semibold text-yellow-400">Pending Verification:</h5>
-                          <div className="space-y-2">
-                            {conditionPending.map((request) => {
-                              // Find player details from leaderboard
-                              const player = leaderboard.find(p => p.$id === request.playerId)
-                              return (
-                                <div 
-                                  key={request.verificationId}
-                                  className="flex items-center justify-between p-3 rounded bg-yellow-900/50 border border-yellow-600/30"
-                                >
-                                  <div className="flex items-center gap-3">
-                                    <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-yellow-600 text-black">
-                                      ?
-                                    </div>
-                                    <span className="font-medium text-white">{player?.name || 'Unknown Player'}</span>
-                                    <span className="text-sm text-gray-400">({player?.regNo || 'N/A'})</span>
-                                    <span className="text-sm text-yellow-400">{player?.score || 0} pts</span>
-                                  </div>
-                                  
-                                  <div className="flex items-center gap-2">
-                                    <button
-                                      onClick={() => handleVerificationDecision(request.verificationId, 'approved')}
-                                      className="px-3 py-1 text-xs font-bold bg-green-600 hover:bg-green-700 text-white rounded transition-colors"
-                                    >
-                                      ✓ Verify & Award
-                                    </button>
-                                    <button
-                                      onClick={() => handleVerificationDecision(request.verificationId, 'rejected', 'Host decision')}
-                                      className="px-3 py-1 text-xs font-bold bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
-                                    >
-                                      ✗ Reject
-                                    </button>
-                                  </div>
-                                </div>
-                              )
-                            })}
+                      {/* Winner Display */}
+                      {hasWinners ? (
+                        <div className="p-4 border rounded-lg bg-green-900/30 border-green-600/50">
+                          <div className="flex items-center gap-3">
+                            <div className="flex items-center justify-center w-8 h-8 font-bold text-white bg-green-600 rounded-full">
+                              👑
+                            </div>
+                            <div>
+                              <div className="text-lg font-semibold text-white">
+                                {conditionWinners[0]?.name || 'Winner'}
+                              </div>
+                              <div className="text-sm text-green-400">
+                                Declared winner for {info.name}
+                              </div>
+                            </div>
                           </div>
                         </div>
-                      )}
-
-                      {/* Winner List */}
-                      {hasWinners && (
-                        <div className="space-y-2">
-                          <h5 className="text-sm font-semibold text-green-400">Verified Winners:</h5>
-                          {conditionWinners.slice(0, 5).map((winner, index) => (
-                            <div 
-                              key={winner.$id}
-                              className="flex items-center justify-between p-2 rounded bg-gray-800/70"
-                            >
-                              <div className="flex items-center gap-3">
-                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                                  index === 0 ? 'bg-yellow-500 text-black' : 
-                                  index === 1 ? 'bg-gray-400 text-black' :
-                                  index === 2 ? 'bg-amber-600 text-white' : 'bg-blue-600 text-white'
-                                }`}>
-                                  {index + 1}
+                      ) : (
+                        /* Pending Requests for this Condition */
+                        <div className="space-y-3">
+                          {conditionRequests.length > 0 ? (
+                            <>
+                              <div className="mb-3 text-sm font-medium text-yellow-400">
+                                📝 Team Requests:
+                              </div>
+                              {conditionRequests.map((request) => (
+                                <div 
+                                  key={request.$id}
+                                  className="p-3 transition-colors border rounded-lg bg-yellow-900/20 border-yellow-600/30 hover:border-yellow-500/50"
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                      <div className="flex items-center justify-center w-6 h-6 text-sm font-bold text-black bg-yellow-600 rounded-full">
+                                        🎯
+                                      </div>
+                                      <div className="font-semibold text-white">
+                                        {request.playerName}
+                                      </div>
+                                    </div>
+                                    
+                                    <button
+                                      onClick={() => handleApproveWinRequest(request)}
+                                      className="px-3 py-1 text-sm font-bold text-white transition-colors bg-green-600 rounded hover:bg-green-700"
+                                    >
+                                      Declare Winner
+                                    </button>
+                                  </div>
                                 </div>
-                                <span className="font-medium text-white">{winner.name}</span>
-                                <span className="text-sm text-gray-400">({winner.regNo})</span>
+                              ))}
+                            </>
+                          ) : (
+                            /* No Requests Yet - Add Declare Winner Button */
+                            <div className="p-3 border rounded-lg bg-gray-900/30 border-gray-600/30">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <div className="flex items-center justify-center w-6 h-6 text-sm text-white bg-gray-600 rounded-full">
+                                    ⏳
+                                  </div>
+                                  <div className="text-white">No winner declared yet</div>
+                                </div>
+                                <button
+                                  onClick={() => handleDeclareWinner(condition)}
+                                  className="px-3 py-1 text-sm font-bold text-white transition-colors bg-blue-600 rounded hover:bg-blue-700"
+                                  disabled={leaderboard.length === 0}
+                                >
+                                  Declare Winner
+                                </button>
                               </div>
-                              
-                              <div className="flex items-center gap-3 text-sm">
-                                <span className="font-medium text-green-400">{winner.score || 0} pts</span>
-                                {winner.winTimestamps && winner.winTimestamps[condition] && (
-                                  <span className="text-gray-400">
-                                    {(() => {
-                                      try {
-                                        const timestamps = typeof winner.winTimestamps === 'string' 
-                                          ? JSON.parse(winner.winTimestamps) 
-                                          : winner.winTimestamps
-                                        return new Date(timestamps[condition]).toLocaleTimeString('en-US', {
-                                          hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'
-                                        })
-                                      } catch (e) {
-                                        return ''
-                                      }
-                                    })()}
-                                  </span>
-                                )}
-                                <CheckCircle className="w-4 h-4 text-green-400" />
-                              </div>
-                            </div>
-                          ))}
-                          
-                          {conditionWinners.length > 5 && (
-                            <div className="pt-2 text-sm text-center text-gray-400">
-                              +{conditionWinners.length - 5} more winners
                             </div>
                           )}
-                        </div>
-                      )}
-
-                      {/* Empty State */}
-                      {!hasWinners && !hasPending && (
-                        <div className="py-4 text-center text-gray-500">
-                          <p className="text-sm">No winners yet</p>
                         </div>
                       )}
                     </div>

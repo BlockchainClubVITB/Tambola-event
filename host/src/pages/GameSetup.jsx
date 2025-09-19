@@ -96,12 +96,10 @@ const GameSetup = () => {
 
   // Team Registration State
   const [showTeamRegistration, setShowTeamRegistration] = useState(false)
-  const [teamMembers, setTeamMembers] = useState([
-    { name: '', regNo: '', email: '' },
-    { name: '', regNo: '', email: '' },
-    { name: '', regNo: '', email: '' },
-    { name: '', regNo: '', email: '' }
-  ])
+  const [teamFormData, setTeamFormData] = useState({
+    teamName: '',
+    teamPassword: ''
+  })
   const [registeredTeams, setRegisteredTeams] = useState([])
   const [loadingTeamRegistration, setLoadingTeamRegistration] = useState(false)
   
@@ -154,40 +152,74 @@ const GameSetup = () => {
   }
 
   // Team Registration Functions
-  const handleTeamMemberChange = (index, field, value) => {
-    const updatedMembers = [...teamMembers]
-    updatedMembers[index][field] = value
-    setTeamMembers(updatedMembers)
+  const handleTeamFormChange = (field, value) => {
+    setTeamFormData(prev => ({
+      ...prev,
+      [field]: value
+    }))
+  }
+
+  const generateRandomTeamName = () => {
+    const adjectives = ['Cyber', 'Digital', 'Quantum', 'Ninja', 'Elite', 'Fusion', 'Matrix', 'Nova', 'Phoenix', 'Thunder']
+    const nouns = ['Warriors', 'Hunters', 'Guardians', 'Masters', 'Legends', 'Knights', 'Titans', 'Rangers', 'Champions', 'Heroes']
+    const randomAdj = adjectives[Math.floor(Math.random() * adjectives.length)]
+    const randomNoun = nouns[Math.floor(Math.random() * nouns.length)]
+    const randomNum = Math.floor(Math.random() * 999) + 1
+    return `${randomAdj}${randomNoun}${randomNum}`
+  }
+
+  const generateRandomPassword = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    let result = ''
+    for (let i = 0; i < 6; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length))
+    }
+    return result
+  }
+
+  const handleGenerateRandomTeamName = () => {
+    setTeamFormData(prev => ({
+      ...prev,
+      teamName: generateRandomTeamName()
+    }))
+  }
+
+  const handleGenerateRandomPassword = () => {
+    setTeamFormData(prev => ({
+      ...prev,
+      teamPassword: generateRandomPassword()
+    }))
   }
 
   const handleTeamRegistration = async () => {
-    // Validate all members have required fields
-    for (let i = 0; i < teamMembers.length; i++) {
-      const member = teamMembers[i]
-      if (!member.name.trim() || !member.regNo.trim() || !member.email.trim()) {
-        alert(`Please fill all fields for Member ${i + 1}`)
-        return
-      }
-      
-      // Basic email validation
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-      if (!emailRegex.test(member.email.trim())) {
-        alert(`Please enter a valid email for Member ${i + 1}`)
-        return
-      }
+    // Validate required fields
+    if (!teamFormData.teamName.trim() || !teamFormData.teamPassword.trim()) {
+      alert('Please fill all required fields')
+      return
+    }
+
+    // Team name validation
+    if (teamFormData.teamName.trim().length < 3) {
+      alert('Team name must be at least 3 characters long')
+      return
+    }
+
+    // Team password validation
+    if (teamFormData.teamPassword.trim().length < 4) {
+      alert('Team password must be at least 4 characters long')
+      return
     }
 
     setLoadingTeamRegistration(true)
     try {
-      // Register team only (no game creation)
-      const result = await gameService.registerTeamOnly(teamMembers)
+      // Register team with only team name and password
+      const result = await gameService.registerTeamOnly(teamFormData)
       
       if (result.success) {
         // Store team data and show success modal
         setRegisteredTeamData({
           teamName: result.teamName,
-          teamPassword: result.teamPassword,
-          members: [...teamMembers]
+          teamPassword: result.teamPassword
         })
         setShowTeamRegistration(false)
         setShowTeamSuccess(true)
@@ -203,12 +235,10 @@ const GameSetup = () => {
   }
 
   const resetTeamForm = () => {
-    setTeamMembers([
-      { name: '', regNo: '', email: '' },
-      { name: '', regNo: '', email: '' },
-      { name: '', regNo: '', email: '' },
-      { name: '', regNo: '', email: '' }
-    ])
+    setTeamFormData({
+      teamName: '',
+      teamPassword: ''
+    })
     setShowTeamRegistration(false)
   }
 
@@ -399,9 +429,9 @@ const GameSetup = () => {
       {/* Team Registration Modal */}
       {showTeamRegistration && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
-          <div className="w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto bg-gray-900 border border-gray-700 rounded-xl shadow-2xl">
-            <div className="sticky top-0 z-10 flex items-center justify-between p-6 bg-gray-900 border-b border-gray-700">
-              <h3 className="text-2xl font-bold text-white">Register Team</h3>
+          <div className="w-full max-w-4xl mx-4 max-h-[80vh] overflow-y-auto bg-gray-900 border border-gray-700 rounded-xl shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between p-4 bg-gray-900 border-b border-gray-700">
+              <h3 className="text-xl font-bold text-white">Register Team</h3>
               <button
                 onClick={resetTeamForm}
                 className="p-2 text-gray-400 transition-colors rounded-lg hover:text-white hover:bg-gray-800"
@@ -410,61 +440,67 @@ const GameSetup = () => {
               </button>
             </div>
 
-            <div className="p-6">
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                {teamMembers.map((member, index) => (
-                  <div key={index} className="p-4 bg-gray-800 border border-gray-700 rounded-lg">
-                    <h4 className="mb-3 text-lg font-semibold text-white">Member {index + 1}</h4>
+            <div className="p-4">
+              <div className="space-y-4">
+                {/* Team Information */}
+                <div className="p-4 bg-gray-800 border border-gray-700 rounded-lg">
+                  <h4 className="mb-4 text-lg font-semibold text-white">Team Information</h4>
+                  
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block mb-1 text-sm font-medium text-gray-300">Team Name *</label>
+                      <div className="flex space-x-2">
+                        <input
+                          type="text"
+                          value={teamFormData.teamName}
+                          onChange={(e) => handleTeamFormChange('teamName', e.target.value)}
+                          className="flex-1 px-3 py-2 text-white placeholder-gray-400 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="Enter team name"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleGenerateRandomTeamName}
+                          className="px-4 py-2 text-sm font-medium text-white transition-colors bg-blue-600 rounded-lg hover:bg-blue-700"
+                        >
+                          🎲 Random
+                        </button>
+                      </div>
+                    </div>
                     
-                    <div className="space-y-3">
-                      <div>
-                        <label className="block mb-1 text-sm font-medium text-gray-300">Name</label>
+                    <div>
+                      <label className="block mb-1 text-sm font-medium text-gray-300">Team Password *</label>
+                      <div className="flex space-x-2">
                         <input
                           type="text"
-                          value={member.name}
-                          onChange={(e) => handleTeamMemberChange(index, 'name', e.target.value)}
-                          className="w-full px-3 py-2 text-white placeholder-gray-400 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="Enter full name"
+                          value={teamFormData.teamPassword}
+                          onChange={(e) => handleTeamFormChange('teamPassword', e.target.value)}
+                          className="flex-1 px-3 py-2 text-white placeholder-gray-400 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="Enter team password"
                         />
-                      </div>
-                      
-                      <div>
-                        <label className="block mb-1 text-sm font-medium text-gray-300">Registration Number</label>
-                        <input
-                          type="text"
-                          value={member.regNo}
-                          onChange={(e) => handleTeamMemberChange(index, 'regNo', e.target.value)}
-                          className="w-full px-3 py-2 text-white placeholder-gray-400 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="Enter reg number"
-                        />
-                      </div>
-                      
-                      <div>
-                        <label className="block mb-1 text-sm font-medium text-gray-300">Email</label>
-                        <input
-                          type="email"
-                          value={member.email}
-                          onChange={(e) => handleTeamMemberChange(index, 'email', e.target.value)}
-                          className="w-full px-3 py-2 text-white placeholder-gray-400 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="Enter email address"
-                        />
+                        <button
+                          type="button"
+                          onClick={handleGenerateRandomPassword}
+                          className="px-4 py-2 text-sm font-medium text-white transition-colors bg-purple-600 rounded-lg hover:bg-purple-700"
+                        >
+                          🔑 Random
+                        </button>
                       </div>
                     </div>
                   </div>
-                ))}
+                </div>
               </div>
 
-              <div className="flex items-center justify-end gap-4 pt-4 mt-6 border-t border-gray-700">
+              <div className="flex items-center justify-end gap-4 pt-3 mt-4 border-t border-gray-700">
                 <button
                   onClick={resetTeamForm}
-                  className="px-6 py-2 text-gray-300 transition-colors bg-gray-700 rounded-lg hover:bg-gray-600"
+                  className="px-4 py-2 text-sm text-gray-300 transition-colors bg-gray-700 rounded-lg hover:bg-gray-600"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleTeamRegistration}
                   disabled={loadingTeamRegistration}
-                  className="px-6 py-2 font-medium text-white transition-all rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 text-sm font-medium text-white transition-all rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loadingTeamRegistration ? 'Registering Team...' : 'Register Team'}
                 </button>
@@ -516,20 +552,6 @@ const GameSetup = () => {
                       </button>
                     </div>
                   </div>
-
-                  {/* Team Members */}
-                  <div className="pt-2">
-                    <h4 className="mb-3 font-medium text-gray-400">Team Members:</h4>
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                      {registeredTeamData.members.map((member, index) => (
-                        <div key={index} className="p-3 bg-gray-700 rounded-lg">
-                          <div className="font-medium text-white">{member.name}</div>
-                          <div className="text-sm text-gray-400">{member.regNo}</div>
-                          <div className="text-sm text-gray-400">{member.email}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
                 </div>
               </div>
 
@@ -539,7 +561,7 @@ const GameSetup = () => {
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                   </svg>
-                  <span className="text-sm font-medium">💡 Take a screenshot of this page to save your team credentials!</span>
+                  <span className="text-sm font-medium">💡  save your team credentials!</span>
                 </div>
               </div>
 

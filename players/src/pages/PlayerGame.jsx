@@ -53,9 +53,8 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
   const [playerScore, setPlayerScore] = useState(0) // Track player's current score
   const [playerPosition, setPlayerPosition] = useState(null) // Track player's leaderboard position
   
-  // Verification State
-  const [lockedConditions, setLockedConditions] = useState(new Set()) // Conditions locked by other players
-  const [verificationStatus, setVerificationStatus] = useState({}) // Player's verification requests status
+  // Locked conditions state (conditions already won by other players)
+  const [lockedConditions, setLockedConditions] = useState(new Set())
   const questionTimerRef = useRef(null)
   const hasShownRestorationRef = useRef(false) // Track if we've shown restoration message
   const gameSubscriptionRef = useRef(null) // Store real-time subscription
@@ -122,7 +121,7 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
     // Single initial fetch only - no continuous polling
     fetchGameState()
     fetchPlayerScoreAndPosition() // Fetch initial score and position
-    checkVerificationStatus() // Check initial verification status and locked conditions
+    checkLockedConditions() // Check conditions already won by other players
     
     // Set up real-time subscription for host events
     setupRealTimeSubscription()
@@ -145,7 +144,7 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
             gameData: updatedGame,
             totalPlayers: updatedGame.playerCount || 0
           }))
-          toast.success('🚀 Game started! Get ready!', { duration: 3000 })
+          // Removed redundant "Game started! Get ready!" toast - only show once when game actually starts
         },
         
         onNumberCalled: (updatedGame) => {
@@ -356,31 +355,25 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
     }
   }
 
-  // Check for locked conditions and verification status
-  const checkVerificationStatus = async () => {
+  // Check for locked conditions (already won by other players)
+  const checkLockedConditions = async () => {
     if (!playerData) return
     
     try {
-      // Check for approved verification requests (locked conditions)
-      const approvedResult = await gameService.getPendingVerificationRequests(gameId)
-      if (approvedResult.success) {
-        const approvedConditions = new Set()
-        approvedResult.requests.forEach(request => {
-          if (request.status === 'approved') {
-            approvedConditions.add(request.conditionId)
+      // Check for conditions already won by looking at actual winners
+      const winnersResult = await gameService.getAllWinners(gameId)
+      if (winnersResult.success) {
+        const wonConditions = new Set()
+        Object.entries(winnersResult.winners).forEach(([condition, winners]) => {
+          if (winners && winners.length > 0) {
+            wonConditions.add(condition)
           }
         })
-        setLockedConditions(approvedConditions)
-      }
-
-      // Get player's own verification status
-      const statusResult = await gameService.getPlayerVerificationStatus(gameId, playerData.$id)
-      if (statusResult.success) {
-        setVerificationStatus(statusResult.verificationStatus)
-        console.log('📝 Verification status updated:', statusResult.verificationStatus)
+        setLockedConditions(wonConditions)
+        console.log('🔒 Locked conditions (already won):', Array.from(wonConditions))
       }
     } catch (error) {
-      console.error('Failed to check verification status:', error)
+      console.error('Failed to check locked conditions:', error)
     }
   }
 
@@ -542,58 +535,30 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
                 setPlayerScore(result.newScore)
               }
               
-              // Handle verification requests instead of direct wins
-              if (result.verificationRequests && result.verificationRequests.length > 0) {
+              // Show notification for newly achieved wins
+              if (result.newWins && result.newWins.length > 0) {
                 const winInfo = getWinConditionInfo()
-                for (const request of result.verificationRequests) {
-                  const info = winInfo[request.condition]
-                  toast.success(`📝 ${info.icon} ${info.name} submitted for verification!`, {
-                    duration: 4000,
+                for (const condition of result.newWins) {
+                  const info = winInfo[condition]
+                  toast.success(`🎯 ${info.icon} ${info.name} achieved! You won!`, {
+                    duration: 5000,
                     style: {
-                      background: '#0891b2',
+                      background: '#10b981',
                       color: 'white',
                       fontWeight: 'bold'
                     }
                   })
                 }
-                console.log('📝 Verification requests submitted:', result.verificationRequests)
-              }
-              
-              // Update local state with only the wins that were actually awarded (approved by host)
-              if (result.newWins && Object.keys(result.newWins).length > 0) {
-                setPlayerWins(prev => ({ ...prev, ...result.newWins }))
+                console.log('🎯 New wins achieved:', result.newWins)
                 
-                // Show win notifications for actually awarded wins
-                const winInfo = getWinConditionInfo()
-                for (const [condition, won] of Object.entries(result.newWins)) {
-                  if (won) {
-                    const info = winInfo[condition]
-                    toast.success(`🏆 ${info.icon} ${info.name} VERIFIED!`, {
-                      duration: 5000,
-                      style: {
-                        background: '#059669',
-                        color: 'white',
-                        fontWeight: 'bold'
-                      }
-                    })
-                  }
-                }
+                // Update local state with the new wins
+                const winsObject = {}
+                result.newWins.forEach(condition => {
+                  winsObject[condition] = true
+                })
+                setPlayerWins(prev => ({ ...prev, ...winsObject }))
               }
               
-              // Show notifications for any denied wins (already won by others)
-              if (result.deniedWins && result.deniedWins.length > 0) {
-                const winInfo = getWinConditionInfo()
-                for (const condition of result.deniedWins) {
-                  const info = winInfo[condition]
-                  toast(`🚫 ${info.name} already won!`, {
-                    duration: 3000,
-                    style: {
-                      background: '#DC2626',
-                      color: 'white',
-                    }
-                  })
-                }
-              }
             } else {
               console.error('❌ Failed to save progress:', result.error)
               // Auto-refresh fallback on failure

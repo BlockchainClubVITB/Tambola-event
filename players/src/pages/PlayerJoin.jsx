@@ -185,29 +185,23 @@ const PlayerJoin = ({ onJoin }) => {
         return
       }
 
-      // Register all team members as players
+      // Register team as a single player
       const registrationResult = await gameService.registerTeamAsPlayers(
         gameId.trim(),
-        verificationResult.teamMembers,
+        null, // No team members needed for simplified registration
         teamName.trim()
       )
 
       if (!registrationResult.success) {
-        toast.error(registrationResult.error || 'Failed to register team members')
+        toast.error(registrationResult.error || 'Failed to register team')
         setIsLoading(false)
         return
-      }
-
-      if (!registrationResult.allRegistered) {
-        console.warn('Some team members could not be registered:', registrationResult.results)
-        toast.warning('Some team members were already registered or had issues')
       }
 
       // Store team info in localStorage
       localStorage.setItem('teamName', teamName.trim())
       localStorage.setItem('gameId', gameId.trim())
       localStorage.setItem('isTeamPlayer', 'true')
-      localStorage.setItem('teamMembers', JSON.stringify(verificationResult.teamMembers))
       
       // Store first registered player as primary player for navigation
       const primaryPlayer = registrationResult.registeredPlayers[0]
