@@ -39,58 +39,67 @@ export class GameService {
         return { success: false, error: 'Game not found' }
       }
 
-      // Check if player already registered with same email AND same details
+      // Check if player/team already registered with same name
       const existingPlayers = await databases.listDocuments(
         this.dbId,
         this.collections.players,
         [
           Query.equal('gameId', gameId),
-          Query.equal('email', playerData.email),
-          Query.equal('name', playerData.name),
-          Query.equal('regNo', playerData.regNo)
+          Query.equal('name', playerData.name)
         ]
       )
 
       if (existingPlayers.documents.length > 0) {
-        // Return existing player data if it's truly the same player (same email, name, and regNo)
+        // Return existing player
         const existingPlayer = existingPlayers.documents[0]
         return { success: true, player: existingPlayer, isReturning: true }
       }
 
-      // Check if someone else already used this email with different details
-      const emailConflict = await databases.listDocuments(
-        this.dbId,
-        this.collections.players,
-        [
-          Query.equal('gameId', gameId),
-          Query.equal('email', playerData.email)
-        ]
-      )
+      // For individual players with email, check for email conflicts
+      if (playerData.email) {
+        const emailConflict = await databases.listDocuments(
+          this.dbId,
+          this.collections.players,
+          [
+            Query.equal('gameId', gameId),
+            Query.equal('email', playerData.email)
+          ]
+        )
 
-      if (emailConflict.documents.length > 0) {
-        const conflictPlayer = emailConflict.documents[0]
-        if (conflictPlayer.name !== playerData.name || conflictPlayer.regNo !== playerData.regNo) {
-          return { 
-            success: false, 
-            error: `Email ${playerData.email} is already registered with different details. Please use a different email or contact support.` 
+        if (emailConflict.documents.length > 0) {
+          const conflictPlayer = emailConflict.documents[0]
+          if (conflictPlayer.name !== playerData.name) {
+            return { 
+              success: false, 
+              error: `Email ${playerData.email} is already registered with different name. Please use a different email or contact support.` 
+            }
           }
         }
       }
 
       // Register new player
+      const playerDocument = {
+        gameId,
+        name: playerData.name,
+        score: 0,
+        isActive: true,
+        joinedAt: new Date().toISOString()
+      }
+
+      // Add optional fields only if they have valid values
+      if (playerData.regNo) {
+        playerDocument.regNo = playerData.regNo
+      }
+      
+      if (playerData.email) {
+        playerDocument.email = playerData.email
+      }
+
       const player = await databases.createDocument(
         this.dbId,
         this.collections.players,
         generateId(),
-        {
-          gameId,
-          name: playerData.name,
-          regNo: playerData.regNo,
-          email: playerData.email,
-          score: 0,
-          isActive: true,
-          joinedAt: new Date().toISOString()
-        }
+        playerDocument
       )
 
       // Update game player count
@@ -222,36 +231,6 @@ export class GameService {
   }
 
   // Update player score
-  async updatePlayerScore(playerId, pointsToAdd) {
-    try {
-      // Get current player data
-      const playerResponse = await databases.getDocument(
-        this.dbId,
-        this.collections.players,
-        playerId
-      )
-
-      const currentScore = playerResponse.score || 0
-      const newScore = currentScore + pointsToAdd
-
-      // Update player score
-      await databases.updateDocument(
-        this.dbId,
-        this.collections.players,
-        playerId,
-        {
-          score: newScore,
-          updatedAt: new Date().toISOString()
-        }
-      )
-
-      return { success: true, newScore }
-    } catch (error) {
-      console.error('Failed to update player score:', error)
-      return { success: false, error: error.message }
-    }
-  }
-
   // Check if a winning condition has already been won by another player
   async checkWinConditionAvailable(gameId, condition) {
     try {
@@ -321,33 +300,33 @@ export class GameService {
 
         // Check which winning conditions need verification requests
         const verificationRequests = []
+        const deniedWins = []
+        
         for (const [condition, won] of Object.entries(winConditions)) {
           if (won && !currentPlayer[condition]) { // Only if player hasn't achieved this condition yet
-            // Check if this condition is still available (no other player has been verified for it)
-            const isAvailable = await this.checkWinConditionAvailable(gameId, condition)
-            if (isAvailable) {
-              // Submit verification request instead of directly awarding
-              const verificationResult = await this.submitWinVerificationRequest(
-                gameId, 
-                playerId, 
-                condition, 
-                currentPlayer.ticketNumbers || [], 
-                correctNumbers, 
-                new Set() // incorrect numbers - empty for now
-              )
-              
-              if (verificationResult.success) {
-                verificationRequests.push({
-                  condition,
-                  verificationId: verificationResult.verificationRequest.verificationId,
-                  status: 'pending'
-                })
-                console.log(`📝 Verification request submitted for ${condition} by player ${playerId}`)
-              } else {
-                console.error(`Failed to submit verification request for ${condition}:`, verificationResult.error)
-              }
+            // Submit verification request
+            const verificationResult = await this.submitWinVerificationRequest(
+              gameId, 
+              playerId, 
+              condition, 
+              currentPlayer.ticketNumbers || [], 
+              correctNumbers, 
+              new Set() // incorrect numbers - empty for now
+            )
+            
+            if (verificationResult.success) {
+              verificationRequests.push({
+                condition,
+                verificationId: verificationResult.verificationRequest.verificationId,
+                status: 'pending'
+              })
+              console.log(`📝 Verification request submitted for ${condition} by player ${playerId}`)
+            } else if (verificationResult.alreadyWon) {
+              // This condition already has a winner
+              deniedWins.push(condition)
+              console.log(`🚫 ${condition} already won by another player, request denied for ${playerId}`)
             } else {
-              console.log(`🚫 ${condition} already verified for another player, request denied for ${playerId}`)
+              console.error(`Failed to submit verification request for ${condition}:`, verificationResult.error)
             }
           }
         }
@@ -366,6 +345,7 @@ export class GameService {
           newScore, 
           player: response, 
           verificationRequests, // Return verification requests instead of direct wins
+          deniedWins, // Return conditions already won by others
           message: 'Score updated and verification requests submitted' 
         }
       } else {
@@ -602,6 +582,17 @@ export class GameService {
     try {
       console.log('📝 Submitting win verification request:', { gameId, playerId, conditionId })
       
+      // First check if this condition already has a winner
+      const existingWinners = await this.getGameWinners(gameId, conditionId)
+      if (existingWinners.success && existingWinners.winners.length > 0) {
+        console.log(`🚫 ${conditionId} already has a winner, rejecting new request from player ${playerId}`)
+        return { 
+          success: false, 
+          error: `${conditionId} already won by another player`,
+          alreadyWon: true 
+        }
+      }
+      
       // Create verification request document
       const verificationRequest = {
         verificationId: generateId(),
@@ -807,6 +798,118 @@ export class GameService {
       
       console.error('Failed to get player verification status:', error)
       return { success: false, error: error.message, verificationStatus: {} }
+    }
+  }
+
+  // Verify team credentials when joining a game
+  async verifyTeamCredentials(teamName, teamPassword, gameId) {
+    try {
+      // First check if game exists
+      const gameResponse = await databases.listDocuments(
+        this.dbId,
+        this.collections.games,
+        [Query.equal('gameId', gameId)]
+      )
+
+      if (gameResponse.documents.length === 0) {
+        return { 
+          success: true, 
+          isValid: false, 
+          message: 'Game ID not found' 
+        }
+      }
+
+      // Then verify team credentials in team_members collection
+      const teamMembersResponse = await databases.listDocuments(
+        this.dbId,
+        this.collections.teamMembers,
+        [
+          Query.equal('teamName', teamName),
+          Query.equal('teamPassword', teamPassword)
+        ]
+      )
+
+      if (teamMembersResponse.documents.length === 0) {
+        return { 
+          success: true, 
+          isValid: false, 
+          message: 'Invalid team name or password' 
+        }
+      }
+
+      if (teamMembersResponse.documents.length < 4) {
+        return { 
+          success: true, 
+          isValid: false, 
+          message: 'Team registration incomplete (needs 4 members)' 
+        }
+      }
+
+      // Return team member details
+      const teamMembers = teamMembersResponse.documents.map(doc => ({
+        name: doc.name,
+        regNo: doc.regNo,
+        email: doc.email
+      }))
+
+      return { 
+        success: true, 
+        isValid: true, 
+        teamMembers,
+        teamName,
+        gameId,
+        message: 'Team credentials verified successfully' 
+      }
+    } catch (error) {
+      console.error('Failed to verify team credentials:', error)
+      return { success: false, error: error.message, isValid: false }
+    }
+  }
+
+  // Register team as a single player using team name
+  async registerTeamAsPlayers(gameId, teamMembers, teamName) {
+    try {
+      // Register the team as a single player using teamName as player name
+      const playerData = {
+        name: teamName // Team name becomes the player name, no other fields needed
+      }
+      
+      const result = await this.registerPlayer(gameId, playerData)
+      
+      if (result.success) {
+        return {
+          success: true,
+          registeredPlayers: [{
+            member: teamName,
+            success: true,
+            playerId: result.player.$id,
+            error: null
+          }],
+          allRegistered: true,
+          results: [{
+            member: teamName,
+            success: true,
+            playerId: result.player.$id,
+            error: null
+          }]
+        }
+      } else {
+        return {
+          success: false,
+          error: result.error,
+          registeredPlayers: [],
+          allRegistered: false,
+          results: [{
+            member: teamName,
+            success: false,
+            playerId: null,
+            error: result.error
+          }]
+        }
+      }
+    } catch (error) {
+      console.error('Failed to register team as player:', error)
+      return { success: false, error: error.message }
     }
   }
 }

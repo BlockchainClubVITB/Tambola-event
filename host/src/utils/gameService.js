@@ -668,10 +668,347 @@ export class GameService {
       )
 
       console.log(`🏆 Winner declared: Player ${playerId} for ${condition}`)
+      
+      // After declaring winner, decline all other pending requests for this condition
+      await this.declineOtherVerificationRequests(currentPlayer.gameId, condition, playerId)
+      
       return { success: true, player: response }
     } catch (error) {
       console.error('❌ Failed to declare winner:', error)
       return { success: false, error: error.message }
+    }
+  }
+
+  // Decline all other pending verification requests for a specific condition (after winner is declared)
+  async declineOtherVerificationRequests(gameId, condition, winnerPlayerId) {
+    try {
+      console.log(`🚫 Declining other pending requests for ${condition} (winner: ${winnerPlayerId})`)
+      
+      // Get all pending verification requests for this condition and game
+      const result = await databases.listDocuments(
+        this.dbId,
+        this.collections.verificationRequests,
+        [
+          Query.equal('gameId', gameId),
+          Query.equal('conditionId', condition),
+          Query.equal('status', 'pending')
+        ]
+      )
+
+      if (result.documents && result.documents.length > 0) {
+        // Filter out the winner's request and decline all others
+        const requestsToDecline = result.documents.filter(req => req.playerId !== winnerPlayerId)
+        
+        console.log(`📝 Found ${requestsToDecline.length} other pending requests to decline`)
+        
+        // Decline each request
+        for (const request of requestsToDecline) {
+          await databases.updateDocument(
+            this.dbId,
+            this.collections.verificationRequests,
+            request.$id,
+            {
+              status: 'rejected',
+              verifiedAt: new Date().toISOString(),
+              verifiedBy: 'system_auto_decline',
+              rejectionReason: `${condition} already won by another player`
+            }
+          )
+          console.log(`✅ Auto-declined request ${request.$id} for player ${request.playerId}`)
+        }
+        
+        return { success: true, declinedCount: requestsToDecline.length }
+      } else {
+        console.log('📝 No other pending requests found to decline')
+        return { success: true, declinedCount: 0 }
+      }
+    } catch (error) {
+      // If verification collection doesn't exist, log and continue
+      if (error.message && error.message.includes('Collection with the requested ID could not be found')) {
+        console.log('📝 Verification collection not found, skipping auto-decline')
+        return { success: true, declinedCount: 0, fallback: true }
+      }
+      
+      console.error('❌ Failed to decline other verification requests:', error)
+      return { success: false, error: error.message }
+    }
+  }
+
+  // Generate random team name
+  generateRandomTeamName() {
+    const adjectives = [
+      'Lightning', 'Thunder', 'Blazing', 'Mighty', 'Swift', 'Golden', 'Silver', 'Diamond',
+      'Phoenix', 'Dragon', 'Eagle', 'Tiger', 'Wolf', 'Storm', 'Fire', 'Ice',
+      'Royal', 'Elite', 'Prime', 'Supreme', 'Alpha', 'Beta', 'Omega', 'Cosmic',
+      'Quantum', 'Cyber', 'Neon', 'Turbo', 'Ultra', 'Mega', 'Super', 'Hyper'
+    ]
+    
+    const nouns = [
+      'Warriors', 'Knights', 'Champions', 'Legends', 'Heroes', 'Titans', 'Giants', 'Masters',
+      'Guardians', 'Defenders', 'Crusaders', 'Gladiators', 'Vikings', 'Spartans', 'Ninjas', 'Samurai',
+      'Rockets', 'Eagles', 'Hawks', 'Falcons', 'Lions', 'Panthers', 'Wolves', 'Bears',
+      'Coders', 'Hackers', 'Wizards', 'Mages', 'Sorcerers', 'Alchemists', 'Engineers', 'Architects'
+    ]
+    
+    const adjective = adjectives[Math.floor(Math.random() * adjectives.length)]
+    const noun = nouns[Math.floor(Math.random() * nouns.length)]
+    
+    return `${adjective} ${noun}`
+  }
+
+  // Generate random password
+  generateRandomPassword() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    let password = ''
+    for (let i = 0; i < 6; i++) {
+      password += chars.charAt(Math.floor(Math.random() * chars.length))
+    }
+    return password
+  }
+
+  // Register a team only (without game creation)
+  async registerTeamOnly(members) {
+    try {
+      console.log('🏆 Registering team with members:', members)
+      
+      // Validate that we have exactly 4 members
+      if (!members || members.length !== 4) {
+        return { success: false, error: 'Team must have exactly 4 members' }
+      }
+
+      // Validate member data
+      for (let i = 0; i < members.length; i++) {
+        const member = members[i]
+        if (!member.name || !member.regNo || !member.email) {
+          return { success: false, error: `Member ${i + 1} is missing required fields (name, regNo, email)` }
+        }
+      }
+
+      // Generate random team name and password
+      const teamName = this.generateRandomTeamName()
+      const teamPassword = this.generateRandomPassword()
+
+      // Create team member documents (without gameId)
+      const teamMemberPromises = members.map(member => 
+        databases.createDocument(
+          this.dbId,
+          this.collections.teamMembers,
+          generateId(),
+          {
+            name: member.name,
+            regNo: member.regNo,
+            email: member.email,
+            teamName: teamName,
+            teamPassword: teamPassword,
+            createdAt: new Date().toISOString()
+          }
+        )
+      )
+
+      // Execute all team member creations
+      const teamMemberResults = await Promise.all(teamMemberPromises)
+
+      console.log('✅ Team registered successfully:', { teamName, teamPassword })
+      
+      return { 
+        success: true, 
+        teamName, 
+        teamPassword,
+        teamMembers: teamMemberResults,
+        message: `Team "${teamName}" registered successfully with password "${teamPassword}"` 
+      }
+    } catch (error) {
+      console.error('❌ Failed to register team:', error)
+      return { success: false, error: error.message }
+    }
+  }
+
+  // Verify team credentials for game joining
+  async verifyTeamCredentials(teamName, teamPassword) {
+    try {
+      const response = await databases.listDocuments(
+        this.dbId,
+        this.collections.teamMembers,
+        [
+          Query.equal('teamName', teamName),
+          Query.equal('teamPassword', teamPassword),
+          Query.equal('isRegistered', true)
+        ]
+      )
+
+      if (response.documents.length >= 4) {
+        // Return team member details
+        const teamMembers = response.documents.map(doc => ({
+          name: doc.name,
+          regNo: doc.regNo,
+          email: doc.email
+        }))
+
+        return { 
+          success: true, 
+          isValid: true, 
+          teamMembers,
+          teamName,
+          message: 'Team credentials verified successfully' 
+        }
+      } else {
+        return { 
+          success: true, 
+          isValid: false, 
+          message: 'Invalid team name or password' 
+        }
+      }
+    } catch (error) {
+      console.error('Failed to verify team credentials:', error)
+      return { success: false, error: error.message, isValid: false }
+    }
+  }
+
+  // Get all registered teams (for admin purposes)
+  async getAllRegisteredTeams() {
+    try {
+      const response = await databases.listDocuments(
+        this.dbId,
+        this.collections.teamMembers,
+        [
+          Query.equal('isRegistered', true),
+          Query.orderDesc('createdAt')
+        ]
+      )
+
+      // Group members by team name
+      const teamGroups = {}
+      response.documents.forEach(member => {
+        if (!teamGroups[member.teamName]) {
+          teamGroups[member.teamName] = {
+            teamName: member.teamName,
+            teamPassword: member.teamPassword,
+            members: [],
+            createdAt: member.createdAt
+          }
+        }
+        teamGroups[member.teamName].members.push({
+          name: member.name,
+          regNo: member.regNo,
+          email: member.email
+        })
+      })
+
+      return { success: true, teams: Object.values(teamGroups) }
+    } catch (error) {
+      console.error('Failed to get registered teams:', error)
+      return { success: false, error: error.message, teams: [] }
+    }
+  }
+  async registerTeam(gameId, members) {
+    try {
+      console.log('🏆 Registering team for game:', gameId, 'with members:', members)
+      
+      // Validate that we have exactly 4 members
+      if (!members || members.length !== 4) {
+        return { success: false, error: 'Team must have exactly 4 members' }
+      }
+
+      // Validate member data
+      for (let i = 0; i < members.length; i++) {
+        const member = members[i]
+        if (!member.name || !member.regNo || !member.email) {
+          return { success: false, error: `Member ${i + 1} is missing required fields (name, regNo, email)` }
+        }
+      }
+
+      // Generate random team name and password
+      const teamName = this.generateRandomTeamName()
+      const teamPassword = this.generateRandomPassword()
+
+      // Create team member documents
+      const teamMemberPromises = members.map(member => 
+        databases.createDocument(
+          this.dbId,
+          this.collections.teamMembers,
+          generateId(),
+          {
+            name: member.name,
+            regNo: member.regNo,
+            email: member.email,
+            teamName: teamName,
+            teamPassword: teamPassword,
+            gameId: gameId,
+            createdAt: new Date().toISOString()
+          }
+        )
+      )
+
+      // Execute all team member creations
+      const teamMemberResults = await Promise.all(teamMemberPromises)
+
+      // Update game with team info (add teamName and teamPassword columns)
+      const gameResult = await databases.getDocument(
+        this.dbId,
+        this.collections.games,
+        gameId
+      )
+
+      // Update game document with team information
+      await databases.updateDocument(
+        this.dbId,
+        this.collections.games,
+        gameResult.$id,
+        {
+          teamName: teamName,
+          teamPassword: teamPassword,
+          updatedAt: new Date().toISOString()
+        }
+      )
+
+      console.log('✅ Team registered successfully:', { teamName, teamPassword })
+      
+      return { 
+        success: true, 
+        teamName, 
+        teamPassword,
+        teamMembers: teamMemberResults,
+        message: `Team "${teamName}" registered successfully with password "${teamPassword}"` 
+      }
+    } catch (error) {
+      console.error('❌ Failed to register team:', error)
+      return { success: false, error: error.message }
+    }
+  }
+
+  // Get all teams for a game
+  async getGameTeams(gameId) {
+    try {
+      const response = await databases.listDocuments(
+        this.dbId,
+        this.collections.teamMembers,
+        [
+          Query.equal('gameId', gameId),
+          Query.orderDesc('createdAt')
+        ]
+      )
+
+      // Group members by team name
+      const teamGroups = {}
+      response.documents.forEach(member => {
+        if (!teamGroups[member.teamName]) {
+          teamGroups[member.teamName] = {
+            teamName: member.teamName,
+            teamPassword: member.teamPassword,
+            members: []
+          }
+        }
+        teamGroups[member.teamName].members.push({
+          name: member.name,
+          regNo: member.regNo,
+          email: member.email
+        })
+      })
+
+      return { success: true, teams: Object.values(teamGroups) }
+    } catch (error) {
+      console.error('Failed to get game teams:', error)
+      return { success: false, error: error.message, teams: [] }
     }
   }
 }

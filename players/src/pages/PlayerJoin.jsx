@@ -91,6 +91,9 @@ const PlayerJoin = ({ onJoin }) => {
   const [regNo, setRegNo] = useState('')
   const [email, setEmail] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [playMode, setPlayMode] = useState('') // 'individual' or 'team'
+  const [teamName, setTeamName] = useState('')
+  const [teamPassword, setTeamPassword] = useState('')
   const navigate = useNavigate()
 
   const handleJoinGame = async (e) => {
@@ -152,6 +155,95 @@ const PlayerJoin = ({ onJoin }) => {
     }
   }
 
+  const handleTeamJoinGame = async (e) => {
+    e.preventDefault()
+    
+    if (!gameId.trim() || !teamName.trim() || !teamPassword.trim()) {
+      toast.error('Please fill all fields')
+      return
+    }
+
+    setIsLoading(true)
+    
+    try {
+      // Verify team credentials
+      const verificationResult = await gameService.verifyTeamCredentials(
+        teamName.trim(), 
+        teamPassword.trim(), 
+        gameId.trim()
+      )
+
+      if (!verificationResult.success) {
+        toast.error(verificationResult.error || 'Failed to verify team credentials')
+        setIsLoading(false)
+        return
+      }
+
+      if (!verificationResult.isValid) {
+        toast.error(verificationResult.message)
+        setIsLoading(false)
+        return
+      }
+
+      // Register all team members as players
+      const registrationResult = await gameService.registerTeamAsPlayers(
+        gameId.trim(),
+        verificationResult.teamMembers,
+        teamName.trim()
+      )
+
+      if (!registrationResult.success) {
+        toast.error(registrationResult.error || 'Failed to register team members')
+        setIsLoading(false)
+        return
+      }
+
+      if (!registrationResult.allRegistered) {
+        console.warn('Some team members could not be registered:', registrationResult.results)
+        toast.warning('Some team members were already registered or had issues')
+      }
+
+      // Store team info in localStorage
+      localStorage.setItem('teamName', teamName.trim())
+      localStorage.setItem('gameId', gameId.trim())
+      localStorage.setItem('isTeamPlayer', 'true')
+      localStorage.setItem('teamMembers', JSON.stringify(verificationResult.teamMembers))
+      
+      // Store first registered player as primary player for navigation
+      const primaryPlayer = registrationResult.registeredPlayers[0]
+      if (primaryPlayer) {
+        localStorage.setItem('playerId', primaryPlayer.playerId)
+        
+        // Store player data in the same format as individual players
+        localStorage.setItem('tambola_player', JSON.stringify({
+          id: primaryPlayer.playerId,
+          gameId: gameId.trim().toUpperCase(),
+          name: teamName.trim(),
+          score: 0
+        }))
+      }
+
+      toast.success(`Team "${teamName}" joined successfully!`)
+
+      // Call the onJoin callback to update App.jsx state
+      onJoin(gameId.trim().toUpperCase(), teamName.trim(), {
+        $id: primaryPlayer.playerId,
+        name: teamName.trim()
+      })
+
+      // Navigate to game page
+      setTimeout(() => {
+        navigate('/game')
+      }, 1000)
+      
+    } catch (error) {
+      console.error('Failed to join as team:', error)
+      toast.error('Failed to join as team. Please check your credentials and try again.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const handleViewInstructions = () => {
     navigate('/instructions')
   }
@@ -207,121 +299,276 @@ const PlayerJoin = ({ onJoin }) => {
 
         {/* Join Form */}
         <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-xl shadow-2xl p-3 xs:p-4 sm:p-6 lg:p-8 mb-3 sm:mb-4 lg:mb-6">
-          <form onSubmit={handleJoinGame} className="space-y-3 xs:space-y-4 sm:space-y-6">
-            <div>
-              <label htmlFor="gameId" className="block mb-2 text-sm font-medium text-gray-300">
-                Game ID
-              </label>
-              <div className="relative">
-                <Users className="absolute w-4 h-4 sm:w-5 sm:h-5 text-gray-500 transform -translate-y-1/2 left-3 top-1/2" />
-                <input
-                  type="text"
-                  id="gameId"
-                  value={gameId}
-                  onChange={(e) => setGameId(e.target.value.toUpperCase())}
-                  placeholder="Enter Game ID"
-                  className="w-full py-2.5 sm:py-3 pl-10 sm:pl-12 pr-3 sm:pr-4 text-white placeholder-gray-500 
-                  transition-all duration-300 bg-gray-800/80 border border-gray-600 rounded-lg 
-                  focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 
-                  hover:border-blue-400 hover:shadow-[0_0_15px_rgba(59,130,246,0.15)] 
-                  focus:shadow-[0_0_20px_rgba(59,130,246,0.25)] text-sm sm:text-base"
-                  disabled={isLoading}
-                />
-              </div>
-            </div>
+          {!playMode ? (
+            /* Mode Selection */
+            <div className="space-y-4">
+              <h3 className="text-lg sm:text-xl font-semibold text-center text-gray-300 mb-6">
+                Choose How You Want to Play
+              </h3>
+              
+              {/* Play Individually Button */}
+              <button
+                onClick={() => toast.error('Individual play mode is currently disabled. Please use team mode.')}
+                className="w-full p-4 sm:p-6 border border-gray-600 rounded-lg bg-gray-800/50 
+                text-gray-500 cursor-not-allowed opacity-50 transition-all duration-300"
+                disabled
+              >
+                <div className="flex items-center justify-center gap-3 mb-2">
+                  <User className="w-6 h-6 sm:w-8 sm:h-8" />
+                  <span className="text-lg sm:text-xl font-semibold">Play Individually</span>
+                </div>
+                <p className="text-sm text-gray-400">Currently Disabled</p>
+              </button>
 
-            <div>
-              <label htmlFor="playerName" className="block mb-2 text-sm font-medium text-gray-300">
-                Your Name
-              </label>
-              <div className="relative">
-                <User className="absolute w-4 h-4 sm:w-5 sm:h-5 text-gray-500 transform -translate-y-1/2 left-3 top-1/2" />
-                <input
-                  type="text"
-                  id="playerName"
-                  value={playerName}
-                  onChange={(e) => setPlayerName(e.target.value)}
-                  placeholder="Enter your full name"
-                  className="w-full py-2.5 sm:py-3 pl-10 sm:pl-12 pr-3 sm:pr-4 text-white placeholder-gray-500 
-                  transition-all duration-300 bg-gray-800/80 border border-gray-600 rounded-lg 
-                  focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 
-                  hover:border-blue-400 hover:shadow-[0_0_15px_rgba(59,130,246,0.15)] 
-                  focus:shadow-[0_0_20px_rgba(59,130,246,0.25)] text-sm sm:text-base"
-                  disabled={isLoading}
-                />
-              </div>
+              {/* Play as Team Button */}
+              <button
+                onClick={() => setPlayMode('team')}
+                className="w-full p-4 sm:p-6 border border-gray-600 rounded-lg bg-gray-800/80 
+                text-white transition-all duration-300 hover:border-blue-400 
+                hover:shadow-[0_0_15px_rgba(59,130,246,0.15)] hover:bg-blue-600/20"
+              >
+                <div className="flex items-center justify-center gap-3 mb-2">
+                  <Users className="w-6 h-6 sm:w-8 sm:h-8" />
+                  <span className="text-lg sm:text-xl font-semibold">Play as a Team</span>
+                </div>
+                <p className="text-sm text-gray-400">Join with your team credentials</p>
+              </button>
             </div>
-
-            <div>
-              <label htmlFor="regNo" className="block mb-2 text-sm font-medium text-gray-300">
-                Registration Number
-              </label>
-              <div className="relative">
-                <CreditCard className="absolute w-4 h-4 sm:w-5 sm:h-5 text-gray-500 transform -translate-y-1/2 left-3 top-1/2" />
-                <input
-                  type="text"
-                  id="regNo"
-                  value={regNo}
-                  onChange={(e) => setRegNo(e.target.value)}
-                  placeholder="Enter your registration number"
-                  className="w-full py-2.5 sm:py-3 pl-10 sm:pl-12 pr-3 sm:pr-4 text-white placeholder-gray-500 
-                  transition-all duration-300 bg-gray-800/80 border border-gray-600 rounded-lg 
-                  focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 
-                  hover:border-blue-400 hover:shadow-[0_0_15px_rgba(59,130,246,0.15)] 
-                  focus:shadow-[0_0_20px_rgba(59,130,246,0.25)] text-sm sm:text-base"
-                  disabled={isLoading}
-                />
+          ) : playMode === 'individual' ? (
+            /* Individual Player Form */
+            <form onSubmit={handleJoinGame} className="space-y-3 xs:space-y-4 sm:space-y-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-300">Individual Player</h3>
+                <button
+                  type="button"
+                  onClick={() => setPlayMode('')}
+                  className="text-gray-400 hover:text-white transition-colors"
+                >
+                  ← Back
+                </button>
               </div>
-            </div>
 
-            <div>
-              <label htmlFor="email" className="block mb-2 text-sm font-medium text-gray-300">
-                Email Address
-              </label>
-              <div className="relative">
-                <Mail className="absolute w-4 h-4 sm:w-5 sm:h-5 text-gray-500 transform -translate-y-1/2 left-3 top-1/2" />
-                <input
-                  type="email"
-                  id="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter your email address"
-                  className="w-full py-2.5 sm:py-3 pl-10 sm:pl-12 pr-3 sm:pr-4 text-white placeholder-gray-500 
-                  transition-all duration-300 bg-gray-800/80 border border-gray-600 rounded-lg 
-                  focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 
-                  hover:border-blue-400 hover:shadow-[0_0_15px_rgba(59,130,246,0.15)] 
-                  focus:shadow-[0_0_20px_rgba(59,130,246,0.25)] text-sm sm:text-base"
-                  disabled={isLoading}
-                />
+              <div>
+                <label htmlFor="gameId" className="block mb-2 text-sm font-medium text-gray-300">
+                  Game ID
+                </label>
+                <div className="relative">
+                  <Users className="absolute w-4 h-4 sm:w-5 sm:h-5 text-gray-500 transform -translate-y-1/2 left-3 top-1/2" />
+                  <input
+                    type="text"
+                    id="gameId"
+                    value={gameId}
+                    onChange={(e) => setGameId(e.target.value.toUpperCase())}
+                    placeholder="Enter Game ID"
+                    className="w-full py-2.5 sm:py-3 pl-10 sm:pl-12 pr-3 sm:pr-4 text-white placeholder-gray-500 
+                    transition-all duration-300 bg-gray-800/80 border border-gray-600 rounded-lg 
+                    focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 
+                    hover:border-blue-400 hover:shadow-[0_0_15px_rgba(59,130,246,0.15)] 
+                    focus:shadow-[0_0_20px_rgba(59,130,246,0.25)] text-sm sm:text-base"
+                    disabled={isLoading}
+                  />
+                </div>
               </div>
-            </div>
 
-            <button
-              type="submit"
-              disabled={isLoading || !gameId.trim() || !playerName.trim() || !regNo.trim() || !email.trim()}
-              className="flex items-center justify-center w-full gap-2 px-4 sm:px-6 py-2.5 sm:py-3 
-                font-semibold text-white transition-all duration-300 
-                bg-gray-800/80 border border-gray-600 rounded-lg
-                hover:border-blue-400 hover:shadow-[0_0_15px_rgba(59,130,246,0.15)]
-                focus:shadow-[0_0_20px_rgba(59,130,246,0.25)]
-                hover:bg-blue-600 hover:border-blue-500
-                disabled:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed 
-                disabled:hover:border-gray-600 disabled:hover:shadow-none
-                text-sm sm:text-base"
-            >
-              {isLoading ? (
-                <>
-                  <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 rounded-full border-white/30 border-t-white animate-spin"></div>
-                  Joining Game...
-                </>
-              ) : (
-                <>
-                  Join Game
-                  <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
-                </>
-              )}
-            </button>
-          </form>
+              <div>
+                <label htmlFor="playerName" className="block mb-2 text-sm font-medium text-gray-300">
+                  Your Name
+                </label>
+                <div className="relative">
+                  <User className="absolute w-4 h-4 sm:w-5 sm:h-5 text-gray-500 transform -translate-y-1/2 left-3 top-1/2" />
+                  <input
+                    type="text"
+                    id="playerName"
+                    value={playerName}
+                    onChange={(e) => setPlayerName(e.target.value)}
+                    placeholder="Enter your full name"
+                    className="w-full py-2.5 sm:py-3 pl-10 sm:pl-12 pr-3 sm:pr-4 text-white placeholder-gray-500 
+                    transition-all duration-300 bg-gray-800/80 border border-gray-600 rounded-lg 
+                    focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 
+                    hover:border-blue-400 hover:shadow-[0_0_15px_rgba(59,130,246,0.15)] 
+                    focus:shadow-[0_0_20px_rgba(59,130,246,0.25)] text-sm sm:text-base"
+                    disabled={isLoading}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="regNo" className="block mb-2 text-sm font-medium text-gray-300">
+                  Registration Number
+                </label>
+                <div className="relative">
+                  <CreditCard className="absolute w-4 h-4 sm:w-5 sm:h-5 text-gray-500 transform -translate-y-1/2 left-3 top-1/2" />
+                  <input
+                    type="text"
+                    id="regNo"
+                    value={regNo}
+                    onChange={(e) => setRegNo(e.target.value)}
+                    placeholder="Enter your registration number"
+                    className="w-full py-2.5 sm:py-3 pl-10 sm:pl-12 pr-3 sm:pr-4 text-white placeholder-gray-500 
+                    transition-all duration-300 bg-gray-800/80 border border-gray-600 rounded-lg 
+                    focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 
+                    hover:border-blue-400 hover:shadow-[0_0_15px_rgba(59,130,246,0.15)] 
+                    focus:shadow-[0_0_20px_rgba(59,130,246,0.25)] text-sm sm:text-base"
+                    disabled={isLoading}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="email" className="block mb-2 text-sm font-medium text-gray-300">
+                  Email Address
+                </label>
+                <div className="relative">
+                  <Mail className="absolute w-4 h-4 sm:w-5 sm:h-5 text-gray-500 transform -translate-y-1/2 left-3 top-1/2" />
+                  <input
+                    type="email"
+                    id="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="Enter your email address"
+                    className="w-full py-2.5 sm:py-3 pl-10 sm:pl-12 pr-3 sm:pr-4 text-white placeholder-gray-500 
+                    transition-all duration-300 bg-gray-800/80 border border-gray-600 rounded-lg 
+                    focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 
+                    hover:border-blue-400 hover:shadow-[0_0_15px_rgba(59,130,246,0.15)] 
+                    focus:shadow-[0_0_20px_rgba(59,130,246,0.25)] text-sm sm:text-base"
+                    disabled={isLoading}
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading || !gameId.trim() || !playerName.trim() || !regNo.trim() || !email.trim()}
+                className="flex items-center justify-center w-full gap-2 px-4 sm:px-6 py-2.5 sm:py-3 
+                  font-semibold text-white transition-all duration-300 
+                  bg-gray-800/80 border border-gray-600 rounded-lg
+                  hover:border-blue-400 hover:shadow-[0_0_15px_rgba(59,130,246,0.15)]
+                  focus:shadow-[0_0_20px_rgba(59,130,246,0.25)]
+                  hover:bg-blue-600 
+                  disabled:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed 
+                  disabled:hover:border-gray-600 disabled:hover:shadow-none
+                  text-sm sm:text-base"
+              >
+                {isLoading ? (
+                  <>
+                    <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 rounded-full border-white/30 border-t-white animate-spin"></div>
+                    Joining Game...
+                  </>
+                ) : (
+                  <>
+                    Join Game
+                    <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
+                  </>
+                )}
+              </button>
+            </form>
+          ) : (
+            /* Team Player Form */
+            <form onSubmit={handleTeamJoinGame} className="space-y-3 xs:space-y-4 sm:space-y-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-300">Team Login</h3>
+                <button
+                  type="button"
+                  onClick={() => setPlayMode('')}
+                  className="text-gray-400 hover:text-white transition-colors"
+                >
+                  ← Back
+                </button>
+              </div>
+
+              <div>
+                <label htmlFor="teamGameId" className="block mb-2 text-sm font-medium text-gray-300">
+                  Game ID
+                </label>
+                <div className="relative">
+                  <GamepadIcon className="absolute w-4 h-4 sm:w-5 sm:h-5 text-gray-500 transform -translate-y-1/2 left-3 top-1/2" />
+                  <input
+                    type="text"
+                    id="teamGameId"
+                    value={gameId}
+                    onChange={(e) => setGameId(e.target.value.toUpperCase())}
+                    placeholder="Enter Game ID"
+                    className="w-full py-2.5 sm:py-3 pl-10 sm:pl-12 pr-3 sm:pr-4 text-white placeholder-gray-500 
+                    transition-all duration-300 bg-gray-800/80 border border-gray-600 rounded-lg 
+                    focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 
+                    hover:border-blue-400 hover:shadow-[0_0_15px_rgba(59,130,246,0.15)] 
+                    focus:shadow-[0_0_20px_rgba(59,130,246,0.25)] text-sm sm:text-base"
+                    disabled={isLoading}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="teamName" className="block mb-2 text-sm font-medium text-gray-300">
+                  Team Name
+                </label>
+                <div className="relative">
+                  <Users className="absolute w-4 h-4 sm:w-5 sm:h-5 text-gray-500 transform -translate-y-1/2 left-3 top-1/2" />
+                  <input
+                    type="text"
+                    id="teamName"
+                    value={teamName}
+                    onChange={(e) => setTeamName(e.target.value)}
+                    placeholder="Enter your team name"
+                    className="w-full py-2.5 sm:py-3 pl-10 sm:pl-12 pr-3 sm:pr-4 text-white placeholder-gray-500 
+                    transition-all duration-300 bg-gray-800/80 border border-gray-600 rounded-lg 
+                    focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 
+                    hover:border-blue-400 hover:shadow-[0_0_15px_rgba(59,130,246,0.15)] 
+                    focus:shadow-[0_0_20px_rgba(59,130,246,0.25)] text-sm sm:text-base"
+                    disabled={isLoading}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="teamPassword" className="block mb-2 text-sm font-medium text-gray-300">
+                  Team Password
+                </label>
+                <div className="relative">
+                  <CreditCard className="absolute w-4 h-4 sm:w-5 sm:h-5 text-gray-500 transform -translate-y-1/2 left-3 top-1/2" />
+                  <input
+                    type="password"
+                    id="teamPassword"
+                    value={teamPassword}
+                    onChange={(e) => setTeamPassword(e.target.value)}
+                    placeholder="Enter your team password"
+                    className="w-full py-2.5 sm:py-3 pl-10 sm:pl-12 pr-3 sm:pr-4 text-white placeholder-gray-500 
+                    transition-all duration-300 bg-gray-800/80 border border-gray-600 rounded-lg 
+                    focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 
+                    hover:border-blue-400 hover:shadow-[0_0_15px_rgba(59,130,246,0.15)] 
+                    focus:shadow-[0_0_20px_rgba(59,130,246,0.25)] text-sm sm:text-base"
+                    disabled={isLoading}
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading || !gameId.trim() || !teamName.trim() || !teamPassword.trim()}
+                className="flex items-center justify-center w-full gap-2 px-4 sm:px-6 py-2.5 sm:py-3 
+                  font-semibold text-white transition-all duration-300 
+                  bg-gray-800/80 border border-gray-600 rounded-lg
+                  hover:border-blue-400 hover:shadow-[0_0_15px_rgba(59,130,246,0.15)]
+                  focus:shadow-[0_0_20px_rgba(59,130,246,0.25)]
+                  hover:bg-blue-600 
+                  disabled:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed 
+                  disabled:hover:border-gray-600 disabled:hover:shadow-none
+                  text-sm sm:text-base"
+              >
+                {isLoading ? (
+                  <>
+                    <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 rounded-full border-white/30 border-t-white animate-spin"></div>
+                    Joining as Team...
+                  </>
+                ) : (
+                  <>
+                    Join as Team
+                    <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
+                  </>
+                )}
+              </button>
+            </form>
+          )}
         </div>
 
         {/* Instructions Link */}
@@ -338,7 +585,13 @@ const PlayerJoin = ({ onJoin }) => {
 
         {/* Footer */}
         <div className="text-[10px] xs:text-xs sm:text-sm text-center text-gray-500 px-2">
-          Need a Game ID? Ask your game host to share it with you.
+          {!playMode ? (
+            "Choose your preferred play mode to get started"
+          ) : playMode === 'team' ? (
+            "Need team credentials? Contact your team leader or game host."
+          ) : (
+            "Need a Game ID? Ask your game host to share it with you."
+          )}
         </div>
       </div>
     </div>

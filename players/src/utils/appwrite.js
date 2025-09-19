@@ -16,7 +16,8 @@ export const APPWRITE_CONFIG = {
     players: 'players', 
     rounds: 'rounds',
     answers: 'answers',
-    verificationRequests: 'verification_requests'
+    verificationRequests: 'verification_requests',
+    teamMembers: 'team_members'
   }
 }
 

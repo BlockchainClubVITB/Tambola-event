@@ -16,7 +16,7 @@ import PlayerTicket from '../components/PlayerTicket'
 import CompleteBoard from '../components/CompleteBoard'
 import PlayerQuestionRound from '../components/PlayerQuestionRound'
 import { gameService } from '../utils/gameService'
-import { checkAllWinningConditions, getWinConditionInfo, getBlockedConditions } from '../utils/winningConditions'
+import { checkAllWinningConditions, getWinConditionInfo, getBlockedConditions, getEarlyFiveProgress } from '../utils/winningConditions'
 import questionsData from '../data/questions.json'
 
 const PlayerGame = ({ gameId, playerName, isJoined }) => {
@@ -723,11 +723,11 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
       return {
         earlyAdopter: { 
           current: 0, 
-          total: 50, 
+          total: 5, 
           blocked: lockedConditions.has('earlyAdopter'), 
           status: lockedConditions.has('earlyAdopter') ? 'locked' : 'active', 
           reason: lockedConditions.has('earlyAdopter') ? 'Another player has been verified for this condition' : null, 
-          pointsToGo: 50 
+          numbersToGo: 5 
         },
         gasSaver: { 
           current: 0, 
@@ -762,17 +762,17 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
     
     // Convert to UI format with database column names  
     return {
-      // Early Five -> earlyAdopter (score-based, 50 points)
+      // Early Five -> earlyAdopter (ticket-based, 5 correct ticket numbers)
       earlyAdopter: {
-        current: playerScore,
-        total: 50,
+        current: getEarlyFiveProgress(correctNumbers, playerTicket, incorrectlyAnsweredNumbers),
+        total: 5,
         blocked: blockedConditions.earlyAdopter?.blocked || lockedConditions.has('earlyAdopter'),
         status: lockedConditions.has('earlyAdopter') ? 'locked' : 
                 (blockedConditions.earlyAdopter?.blocked ? 'blocked' : 
-                (playerScore >= 50 ? 'completed' : 'active')),
+                (getEarlyFiveProgress(correctNumbers, playerTicket, incorrectlyAnsweredNumbers) >= 5 ? 'completed' : 'active')),
         reason: lockedConditions.has('earlyAdopter') ? 'Another player has been verified for this condition' :
                 (blockedConditions.earlyAdopter?.reason || null),
-        pointsToGo: Math.max(50 - playerScore, 0)
+        numbersToGo: Math.max(5 - getEarlyFiveProgress(correctNumbers, playerTicket, incorrectlyAnsweredNumbers), 0)
       },
       
       // Any Row -> gasSaver

@@ -2,11 +2,50 @@
 // Based on player's ticket (3 rows x 5 numbers = 15 numbers total)
 
 /**
- * Check if player has won "Early Five" - First to reach 50 points
- * 50 points for first player to achieve this
+ * Check if player has won "Early Five" - First to correctly answer 5 numbers from their ticket
+ * @param {Set} correctNumbers - Set of correctly answered numbers
+ * @param {Array} playerTicket - Player's 3x5 ticket array
+ * @param {Set} incorrectNumbers - Set of incorrectly answered numbers (for blocking logic)
+ * @returns {boolean} - True if player has 5 correct numbers from their ticket
  */
-export const checkEarlyFive = (playerScore) => {
-  return playerScore >= 50
+export const checkEarlyFive = (correctNumbers, playerTicket, incorrectNumbers = new Set()) => {
+  if (!playerTicket || playerTicket.length === 0 || !correctNumbers) {
+    return false
+  }
+  
+  // Get all numbers from player's ticket
+  const ticketNumbers = playerTicket.flat()
+  
+  // Count correct answers that are on the player's ticket and not answered incorrectly
+  const correctTicketNumbers = ticketNumbers.filter(num => 
+    correctNumbers.has(num) && !incorrectNumbers.has(num)
+  )
+  
+  // Early Five requires 5 correct numbers from the ticket
+  return correctTicketNumbers.length >= 5
+}
+
+/**
+ * Get Early Five progress - count of correct ticket numbers
+ * @param {Set} correctNumbers - Set of correctly answered numbers
+ * @param {Array} playerTicket - Player's 3x5 ticket array
+ * @param {Set} incorrectNumbers - Set of incorrectly answered numbers
+ * @returns {number} - Count of correct numbers from the ticket
+ */
+export const getEarlyFiveProgress = (correctNumbers, playerTicket, incorrectNumbers = new Set()) => {
+  if (!playerTicket || playerTicket.length === 0 || !correctNumbers) {
+    return 0
+  }
+  
+  // Get all numbers from player's ticket
+  const ticketNumbers = playerTicket.flat()
+  
+  // Count correct answers that are on the player's ticket and not answered incorrectly
+  const correctTicketNumbers = ticketNumbers.filter(num => 
+    correctNumbers.has(num) && !incorrectNumbers.has(num)
+  )
+  
+  return correctTicketNumbers.length
 }
 
 /**
@@ -57,8 +96,8 @@ export const checkFullHouse = (correctNumbers, playerTicket, incorrectNumbers = 
 export const checkAllWinningConditions = (correctNumbers, previousWins = {}, playerTicket = [], incorrectNumbers = new Set(), playerScore = 0) => {
   const newWins = {}
   
-  // Check Early Five (earlyAdopter) - first to 50 points, not blocked by incorrect answers
-  if (!previousWins.earlyAdopter && checkEarlyFive(playerScore)) {
+  // Check Early Five (earlyAdopter) - first to correctly answer 5 numbers from their ticket
+  if (!previousWins.earlyAdopter && checkEarlyFive(correctNumbers, playerTicket, incorrectNumbers)) {
     newWins.earlyAdopter = true
   }
   
@@ -85,8 +124,18 @@ export const getBlockedConditions = (incorrectNumbers = new Set(), playerTicket 
   const blocked = {}
   const ticketNumbers = playerTicket.flat()
   
-  // Early Five (earlyAdopter) is NEVER blocked - it's based on total score, not ticket numbers
-  blocked.earlyAdopter = { blocked: false, reason: null }
+  // Early Five (earlyAdopter) - check if enough ticket numbers are available
+  const incorrectTicketNumbers = ticketNumbers.filter(num => incorrectNumbers.has(num))
+  const availableTicketNumbers = ticketNumbers.length - incorrectTicketNumbers.length
+  
+  if (availableTicketNumbers < 5) {
+    blocked.earlyAdopter = { 
+      blocked: true, 
+      reason: `Only ${availableTicketNumbers} ticket numbers available (need 5 for Early Five)` 
+    }
+  } else {
+    blocked.earlyAdopter = { blocked: false, reason: null }
+  }
   
   // Any Row (gasSaver) - check if all rows are blocked
   const rows = playerTicket || []
@@ -134,7 +183,7 @@ export const getWinConditionInfo = () => {
   return {
     earlyAdopter: {
       name: "Early Five",
-      description: "First to reach 50 points",
+      description: "First to correctly answer 5 numbers from your ticket",
       icon: "⚡",
       priority: 1,
       points: 50
