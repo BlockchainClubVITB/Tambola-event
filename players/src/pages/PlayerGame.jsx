@@ -59,6 +59,50 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
   const hasShownRestorationRef = useRef(false) // Track if we've shown restoration message
   const gameSubscriptionRef = useRef(null) // Store real-time subscription
 
+  // Function to save player progress to localStorage
+  const savePlayerProgress = (markedNums, correctNums, incorrectNums) => {
+    const storedPlayer = localStorage.getItem('tambola_player')
+    const currentGameId = storedPlayer ? JSON.parse(storedPlayer).gameId : (gameId || playerData?.gameId)
+    const currentPlayerName = storedPlayer ? JSON.parse(storedPlayer).name : (playerName || playerData?.name)
+    
+    const progressKey = `tambola_progress_${currentGameId}_${currentPlayerName}`
+    const progress = {
+      markedNumbers: Array.from(markedNums || markedNumbers),
+      correctlyAnsweredNumbers: Array.from(correctNums || correctlyAnsweredNumbers),
+      incorrectlyAnsweredNumbers: Array.from(incorrectNums || incorrectlyAnsweredNumbers),
+      savedAt: Date.now()
+    }
+    
+    localStorage.setItem(progressKey, JSON.stringify(progress))
+    console.log('💾 Saved player progress to localStorage')
+  }
+
+  // Function to restore player progress from localStorage
+  const restorePlayerProgress = () => {
+    const storedPlayer = localStorage.getItem('tambola_player')
+    const currentGameId = storedPlayer ? JSON.parse(storedPlayer).gameId : (gameId || playerData?.gameId)
+    const currentPlayerName = storedPlayer ? JSON.parse(storedPlayer).name : (playerName || playerData?.name)
+    
+    const progressKey = `tambola_progress_${currentGameId}_${currentPlayerName}`
+    const existingProgress = localStorage.getItem(progressKey)
+    
+    if (existingProgress) {
+      try {
+        const progress = JSON.parse(existingProgress)
+        console.log('🔄 Restoring player progress from localStorage')
+        
+        setMarkedNumbers(new Set(progress.markedNumbers || []))
+        setCorrectlyAnsweredNumbers(new Set(progress.correctlyAnsweredNumbers || []))
+        setIncorrectlyAnsweredNumbers(new Set(progress.incorrectlyAnsweredNumbers || []))
+        
+        return true
+      } catch (error) {
+        console.warn('⚠️ Failed to restore player progress:', error)
+      }
+    }
+    return false
+  }
+
   // Redirect if not joined - simple check
   useEffect(() => {
     // Check if we have player data (fresh login or localStorage)
@@ -81,6 +125,9 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
 
     // Generate a sample ticket for the player
     generatePlayerTicket()
+    
+    // Restore player progress (marked numbers, correct/incorrect answers)
+    restorePlayerProgress()
     
     // Start initial game polling and set up real-time subscriptions
     startGamePolling()
@@ -500,6 +547,9 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
       const newCorrectNumbers = new Set([...correctlyAnsweredNumbers, questionData.id])
       setCorrectlyAnsweredNumbers(newCorrectNumbers)
       
+      // Save progress to localStorage immediately
+      savePlayerProgress(markedNumbers, newCorrectNumbers, incorrectlyAnsweredNumbers)
+      
       // Calculate the new score for winning condition checks
       const expectedNewScore = playerScore + 10
       
@@ -580,6 +630,10 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
       setIncorrectlyAnsweredNumbers(prev => {
         const newSet = new Set([...prev, questionData.id])
         console.log('🔍 Updated incorrectlyAnsweredNumbers:', Array.from(newSet))
+        
+        // Save progress to localStorage immediately
+        savePlayerProgress(markedNumbers, correctlyAnsweredNumbers, newSet)
+        
         return newSet
       })
     }
@@ -630,7 +684,28 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
   }
 
   const generatePlayerTicket = () => {
-    // Generate a random Tambola ticket (3x5 grid with 15 numbers from 1-90)
+    const storedPlayer = localStorage.getItem('tambola_player')
+    const currentGameId = storedPlayer ? JSON.parse(storedPlayer).gameId : (gameId || playerData?.gameId)
+    const currentPlayerName = storedPlayer ? JSON.parse(storedPlayer).name : (playerName || playerData?.name)
+    
+    // Create a unique key for this player's ticket in this game
+    const ticketKey = `tambola_ticket_${currentGameId}_${currentPlayerName}`
+    
+    // Check if ticket already exists in localStorage
+    const existingTicket = localStorage.getItem(ticketKey)
+    if (existingTicket) {
+      try {
+        const parsedTicket = JSON.parse(existingTicket)
+        console.log('🎫 Restored existing ticket from localStorage')
+        setPlayerTicket(parsedTicket)
+        return
+      } catch (error) {
+        console.warn('⚠️ Failed to parse existing ticket, generating new one')
+      }
+    }
+
+    // Generate a new random Tambola ticket (3x5 grid with 15 numbers from 1-90)
+    console.log('🎫 Generating new ticket for player')
     const ticket = Array(3).fill(null).map(() => Array(5).fill(null))
     const columns = [
       [1, 18], [19, 36], [37, 54], [55, 72], [73, 90]
@@ -658,6 +733,10 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
       })
     }
 
+    // Store the ticket in localStorage
+    localStorage.setItem(ticketKey, JSON.stringify(ticket))
+    console.log('🎫 Saved new ticket to localStorage')
+    
     setPlayerTicket(ticket)
   }
 
@@ -670,6 +749,10 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
         } else {
           newSet.add(number)
         }
+        
+        // Save progress to localStorage immediately
+        savePlayerProgress(newSet, correctlyAnsweredNumbers, incorrectlyAnsweredNumbers)
+        
         return newSet
       })
     }
