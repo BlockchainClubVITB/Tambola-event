@@ -3,7 +3,7 @@ import { CheckCircle, Clock, X } from 'lucide-react'
 
 const CompleteBoard = ({ selectedNumbers = [], currentNumber = null, onNumberClick = null }) => {
   // Generate all numbers 1-50
-  const allNumbers = Array.from({ length: 50 }, (_, i) => i + 1)
+  const allNumbers = Array.from({ length: 90 }, (_, i) => i + 1)
 
   const getNumberStatus = (number) => {
     if (number === currentNumber) return 'current'

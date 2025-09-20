@@ -25,7 +25,7 @@ const CompleteBoard = ({
   correctlyAnsweredNumbers = new Set(),
   playerWins = {}
 }) => {
-  const allNumbers = Array.from({ length: 50 }, (_, i) => i + 1);
+  const allNumbers = Array.from({ length: 90 }, (_, i) => i + 1);
 
   const getNumberStatus = (number) => {
     if (number === currentNumber) return 'current';

@@ -630,10 +630,10 @@ const PlayerGame = ({ gameId, playerName, isJoined }) => {
   }
 
   const generatePlayerTicket = () => {
-    // Generate a random Tambola ticket (3x5 grid with 15 numbers)
+    // Generate a random Tambola ticket (3x5 grid with 15 numbers from 1-90)
     const ticket = Array(3).fill(null).map(() => Array(5).fill(null))
     const columns = [
-      [1, 10], [11, 20], [21, 30], [31, 40], [41, 50]
+      [1, 18], [19, 36], [37, 54], [55, 72], [73, 90]
     ]
 
     // Fill 5 numbers per row, ensuring each column constraint

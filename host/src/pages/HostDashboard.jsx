@@ -817,7 +817,7 @@ const HostDashboard = () => {
           <div className="p-4 transition-all duration-500 ease-out transform border border-gray-800 opacity-0 bg-gray-900/50 backdrop-blur-sm rounded-xl animate-fade-in-up">
             <div className="flex items-center gap-3">
               <Clock className="w-5 h-5 text-blue-400" />
-              <span className="text-white">Numbers Called: {selectedNumbers.length}/50</span>
+              <span className="text-white">Numbers Called: {selectedNumbers.length}/90</span>
             </div>
           </div>
 
@@ -1075,7 +1075,7 @@ const HostDashboard = () => {
                 {/* QR Code */}
                 <div className="p-6 mb-6 bg-white rounded-xl">
                   <img 
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`https://blockchain-decrypt2win.vercel.app/?gameId=${gameId}`)}&bgcolor=ffffff&color=000000&qzone=2&format=png`}
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`https://decrypt2win.blockchainvitb.in/?gameId=${gameId}`)}&bgcolor=ffffff&color=000000&qzone=2&format=png`}
                     alt="QR Code"
                     className="w-48 h-48 mx-auto"
                   />
@@ -1086,7 +1086,7 @@ const HostDashboard = () => {
                   <div className="mb-2 text-sm text-gray-400">Game Link</div>
                   <div className="p-3 bg-gray-800 border border-gray-600 rounded-lg">
                     <div className="text-sm text-blue-400 break-all">
-                      https://blockchain-decrypt2win.vercel.app/?gameId={gameId}
+                      https://decrypt2win.blockchainvitb.in/?gameId={gameId}
                     </div>
                   </div>
                 </div>
